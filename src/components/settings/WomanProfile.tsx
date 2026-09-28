@@ -2,23 +2,18 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCycle } from '../../context/CycleContext';
 import { 
-  User, 
   Heart, 
   ShieldCheck, 
-  RotateCcw, 
-  Droplet, 
-  Bell, 
   LogOut, 
   ChevronRight, 
-  Sliders, 
   Sparkles 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Disclaimer } from '../common/Disclaimer';
 
 export const WomanProfile: React.FC = () => {
-  const { user, logout, updateCurrentUserProfile } = useAuth();
-  const { cycleProfile, updateCycleProfile, partnerConnection, addToast } = useCycle();
+  const { user, logout } = useAuth();
+  const { cycleProfile, updateCycleProfile, partnerConnection } = useCycle();
   const navigate = useNavigate();
 
   const [cycleLength, setCycleLength] = useState<number>(cycleProfile.average_cycle_length || 28);
@@ -38,11 +33,17 @@ export const WomanProfile: React.FC = () => {
       {/* User Card */}
       <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100 flex items-center gap-4">
         <div className="relative">
-          <img
-            src={user?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-            alt={user?.full_name}
-            className="w-16 h-16 rounded-full object-cover ring-4 ring-rose-100"
-          />
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={user.full_name}
+              className="w-16 h-16 rounded-full object-cover ring-4 ring-rose-100"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-xl font-bold ring-4 ring-rose-100">
+              {user?.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'}
+            </div>
+          )}
           <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
         </div>
         <div>
@@ -50,9 +51,10 @@ export const WomanProfile: React.FC = () => {
             Account Profile
           </span>
           <h2 className="text-lg font-bold font-display text-gray-900 leading-tight">
-            {user?.full_name || 'Sarah Miller'}
+            {user?.full_name || 'HerCycle Member'}
           </h2>
-          <p className="text-xs text-gray-500">{user?.email || 'demo.woman@hercycle.app'}</p>
+          <p className="text-xs text-gray-500">{user?.email || ''}</p>
+          {user?.age && <p className="text-[11px] text-gray-400 mt-0.5">Age: {user.age}</p>}
         </div>
       </div>
 
@@ -116,7 +118,7 @@ export const WomanProfile: React.FC = () => {
           </div>
           <div className="flex items-center gap-1.5 text-gray-400">
             <span className="text-[11px] text-emerald-600 font-bold">
-              {partnerConnection?.status === 'active' ? 'Connected' : 'Configure'}
+              {partnerConnection?.status === 'approved' ? 'Connected' : 'Configure'}
             </span>
             <ChevronRight className="w-4 h-4" />
           </div>
@@ -145,7 +147,7 @@ export const WomanProfile: React.FC = () => {
         </button>
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="w-full p-3 rounded-2xl bg-gray-50 hover:bg-rose-50 border border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-800 transition"
         >
           <div className="flex items-center gap-2.5">

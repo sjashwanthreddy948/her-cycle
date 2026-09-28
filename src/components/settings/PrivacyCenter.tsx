@@ -66,11 +66,11 @@ export const PrivacyCenter: React.FC = () => {
   const handleDeleteData = async () => {
     if (!user) return;
     try {
-      await db.deleteUserData(user.id);
+      await db.deleteUserAccount();
       addToast('All cycle data permanently deleted', 'info');
-      logout();
+      await logout();
       navigate('/login');
-    } catch (e: any) {
+    } catch {
       addToast('Deletion failed', 'error');
     }
   };
@@ -189,7 +189,7 @@ export const PrivacyCenter: React.FC = () => {
         </button>
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="w-full p-3 rounded-2xl bg-gray-50 hover:bg-rose-50 border border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-800 transition"
         >
           <div className="flex items-center gap-2.5">

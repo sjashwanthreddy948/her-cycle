@@ -7,12 +7,7 @@ import {
   ArrowRight, 
   ArrowLeft, 
   Check, 
-  ShieldCheck, 
-  Calendar, 
   Sparkles, 
-  User, 
-  Mail, 
-  Lock, 
   AlertCircle 
 } from 'lucide-react';
 import { Disclaimer } from '../components/common/Disclaimer';
@@ -25,11 +20,11 @@ export const RegisterPage: React.FC = () => {
   const [role, setRole] = useState<UserRole>('woman');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [age, setAge] = useState<number>(26);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // Step 2 (Woman specific)
-  const [dob, setDob] = useState('1998-04-12');
   const [cycleLength, setCycleLength] = useState<number>(28);
   const [periodLength, setPeriodLength] = useState<number>(5);
   const [lastPeriodStart, setLastPeriodStart] = useState(() => {
@@ -66,11 +61,15 @@ export const RegisterPage: React.FC = () => {
 
     if (step === 1) {
       if (!fullName.trim() || !email.trim() || !password) {
-        setError('Please fill in all fields.');
+        setError('Please fill in all required fields.');
         return;
       }
-      if (password.length < 6) {
-        setError('Password must be at least 6 characters.');
+      if (age < 10 || age > 100) {
+        setError('Age must be between 10 and 100.');
+        return;
+      }
+      if (password.length < 10) {
+        setError('Password must be at least 10 characters for security.');
         return;
       }
       if (password !== confirmPassword) {
@@ -97,9 +96,10 @@ export const RegisterPage: React.FC = () => {
     try {
       const created = await register({
         email,
+        password,
         fullName,
         role,
-        dateOfBirth: dob,
+        age,
         cycleLength,
         periodLength,
         lastPeriodStart,
@@ -208,7 +208,24 @@ export const RegisterPage: React.FC = () => {
                 type="text"
                 value={fullName}
                 onChange={e => setFullName(e.target.value)}
-                placeholder="e.g. Sarah Miller"
+                placeholder="e.g. Elena Vance"
+                required
+                className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+              />
+            </div>
+
+            {/* Age */}
+            <div>
+              <div className="flex justify-between items-center text-xs font-semibold text-gray-700 mb-1">
+                <span>Age</span>
+                <span className="text-rose-600 font-bold">{age} years old</span>
+              </div>
+              <input
+                type="number"
+                min="10"
+                max="100"
+                value={age}
+                onChange={e => setAge(Number(e.target.value))}
                 required
                 className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
               />
@@ -238,7 +255,7 @@ export const RegisterPage: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder="Minimum 10 characters"
                 required
                 className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
               />

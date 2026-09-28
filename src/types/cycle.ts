@@ -17,6 +17,7 @@ export interface CycleCalculationResult {
   estimatedOvulationDate: string;
   progressPercent: number;
   phaseProgressPercent: number;
+  hasLoggedCycle: boolean;
 }
 
 export interface PhaseInfo {

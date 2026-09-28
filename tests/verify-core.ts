@@ -1,66 +1,71 @@
 import { calculateCycleState, computeCycleStatistics, formatDateYMD, addDays } from '../src/lib/cycleCalculator.ts';
-import { 
-  DEMO_WOMAN_USER, 
-  DEMO_PARTNER_USER, 
-  DEMO_CYCLE_PROFILE, 
-  generateDemoPeriodLogs, 
-  generateDemoDailyLogs,
-  DEMO_PARTNER_CONNECTION,
-  DEMO_SHARING_PERMISSIONS
-} from '../src/lib/seedData.ts';
-import { db } from '../src/lib/db.ts';
+import { CycleProfile, PeriodLog, DailyLog } from '../src/types/database.ts';
 
-function runAssertions() {
-  console.log('🧪 Starting HerCycle Core System Verification...\n');
+function runCoreAssertions() {
+  console.log('🧪 Starting HerCycle Core Engine Verification...\n');
 
-  // 1. Verify Demo Users & Seed Profile
-  console.log('1. Checking Seed Demo Accounts:');
-  console.assert(DEMO_WOMAN_USER.email === 'demo.woman@hercycle.app', 'Woman email should match');
-  console.assert(DEMO_PARTNER_USER.email === 'demo.partner@hercycle.app', 'Partner email should match');
-  console.log('  ✓ Demo accounts verified: Sarah Miller & Alex Miller');
+  const baselineProfile: CycleProfile = {
+    user_id: 'test-user-123',
+    average_cycle_length: 28,
+    average_period_length: 5,
+    last_period_start: null,
+    goals: ['cycle_tracking'],
+  };
 
-  // 2. Verify Cycle Calculation Engine
-  console.log('\n2. Testing Cycle Calculation State:');
-  const periods = generateDemoPeriodLogs();
-  const dailies = generateDemoDailyLogs();
-  const state = calculateCycleState(DEMO_CYCLE_PROFILE, periods);
+  // 1. Verify Empty State (Brand-new user with zero logs)
+  console.log('1. Testing Brand-New User Empty State:');
+  const emptyState = calculateCycleState(baselineProfile, []);
+  console.assert(emptyState.hasLoggedCycle === false, 'New user should have hasLoggedCycle = false');
+  console.assert(emptyState.currentCycleDay === 0, 'New user cycle day is 0 prior to period log');
+  console.assert(emptyState.isCurrentlyOnPeriod === false, 'User with no logs is not on period');
+  console.log('  ✓ Clean empty state verified for fresh registration');
 
-  console.log(`  Current Cycle Day: ${state.currentCycleDay} of ${state.totalCycleLength}`);
-  console.log(`  Current Phase: ${state.phaseDisplayName}`);
-  console.log(`  Days until next period: ${state.daysUntilNextPeriod}`);
-  console.log(`  Estimated next period: ${state.estimatedNextPeriodStart}`);
-  console.log(`  Fertile window: ${state.fertileWindowStart} to ${state.fertileWindowEnd}`);
+  // 2. Verify Active Cycle Calculations
+  console.log('\n2. Testing Cycle Rhythm Calculations:');
+  const today = new Date();
+  const lastPeriodDate = addDays(today, -11); // Day 12 of cycle today
+  const activePeriods: PeriodLog[] = [
+    {
+      id: 'log-1',
+      user_id: 'test-user-123',
+      start_date: formatDateYMD(lastPeriodDate),
+      flow: 'medium',
+    }
+  ];
 
-  console.assert(state.currentCycleDay === 12, 'Target anchor was Day 12');
-  console.assert(state.currentPhase === 'follicular', 'Day 12 must be follicular phase');
-  console.assert(state.daysUntilNextPeriod === 16, 'Period should be 16 days away');
-  console.log('  ✓ Cycle calculations match requirement exactly: Day 12 of 28, Follicular, 16 days away');
+  const activeState = calculateCycleState(baselineProfile, activePeriods);
+  console.log(`  Current Cycle Day: ${activeState.currentCycleDay} of ${activeState.totalCycleLength}`);
+  console.log(`  Current Phase: ${activeState.phaseDisplayName}`);
+  console.log(`  Days until next period: ${activeState.daysUntilNextPeriod}`);
 
-  // 3. Testing Statistics & Trends
-  console.log('\n3. Testing Cycle Statistics:');
-  const stats = computeCycleStatistics(DEMO_CYCLE_PROFILE, periods, dailies);
-  console.log(`  Average cycle length: ${stats.averageCycleLength} days`);
-  console.log(`  Shortest cycle: ${stats.shortestCycleLength} days`);
-  console.log(`  Longest cycle: ${stats.longestCycleLength} days`);
-  console.log(`  Average period: ${stats.averagePeriodLength} days`);
-  console.log(`  Cycle Regularity: ${stats.cycleRegularity}`);
-  console.log(`  Total cycles logged: ${stats.totalCyclesLogged}`);
-  console.log(`  Top symptom: ${stats.symptomFrequency[0]?.name} (${stats.symptomFrequency[0]?.count} times)`);
+  console.assert(activeState.hasLoggedCycle === true, 'hasLoggedCycle should be true');
+  console.assert(activeState.currentCycleDay === 12, 'Cycle day should calculate to Day 12');
+  console.assert(activeState.currentPhase === 'follicular', 'Day 12 should be follicular phase');
+  console.assert(activeState.daysUntilNextPeriod === 16, 'Period should be 16 days away');
+  console.log('  ✓ Cycle rhythm verified: Day 12 of 28, Follicular, 16 days to next period');
 
-  console.assert(stats.averageCycleLength >= 27 && stats.averageCycleLength <= 29, 'Average cycle should be ~28 days');
-  console.assert(stats.averagePeriodLength === 5, 'Average period should be 5 days');
-  console.assert(stats.symptomFrequency.length > 0, 'Symptom frequency should be populated');
-  console.log('  ✓ Historical stats accurately reflect 5 months of rich cycle logs');
+  // 3. Testing Statistics with Multiple Cycles
+  console.log('\n3. Testing Statistics Calculation:');
+  // Chronological order for 3 periods
+  const historicalPeriods: PeriodLog[] = [
+    { id: 'p3', user_id: 'test-user-123', start_date: formatDateYMD(addDays(today, -67)), end_date: formatDateYMD(addDays(today, -62)), flow: 'medium' },
+    { id: 'p2', user_id: 'test-user-123', start_date: formatDateYMD(addDays(today, -39)), end_date: formatDateYMD(addDays(today, -34)), flow: 'heavy' },
+    { id: 'p1', user_id: 'test-user-123', start_date: formatDateYMD(addDays(today, -11)), flow: 'medium' },
+  ];
 
-  // 4. Partner Data Masking & Privacy Enforcement
-  console.log('\n4. Testing Partner Security & Permission Masking:');
-  // Check default permissions
-  console.assert(DEMO_SHARING_PERMISSIONS.cycle_phase === true, 'Phase should be shared by default');
-  console.assert(DEMO_SHARING_PERMISSIONS.notes === false, 'Private notes MUST NOT be shared by default');
-  console.assert(DEMO_SHARING_PERMISSIONS.weight === false, 'Weight MUST NOT be shared by default');
-  console.log('  ✓ Sensitive personal fields (Notes, Weight) are strictly OFF by default');
+  const testDailies: DailyLog[] = [
+    { id: 'd1', user_id: 'test-user-123', log_date: formatDateYMD(today), symptoms: ['cramps', 'headache'] },
+    { id: 'd2', user_id: 'test-user-123', log_date: formatDateYMD(addDays(today, -1)), symptoms: ['cramps'] },
+  ];
+
+  const stats = computeCycleStatistics(baselineProfile, historicalPeriods, testDailies);
+  console.assert(stats.totalCyclesLogged === 3, 'Should detect 3 periods logged');
+  console.assert(stats.averageCycleLength === 28, 'Average cycle length should be 28 days');
+  console.assert(stats.symptomFrequency.length > 0, 'Symptom frequency should be non-empty');
+  console.assert(stats.symptomFrequency[0].name.toLowerCase() === 'cramps', 'Top symptom should be cramps');
+  console.log('  ✓ Statistical intervals and symptom aggregation verified');
 
   console.log('\n🎉 ALL HERCYCLE CORE VERIFICATIONS PASSED SUCCESSFULLY!');
 }
 
-runAssertions();
+runCoreAssertions();

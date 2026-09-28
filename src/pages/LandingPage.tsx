@@ -1,127 +1,130 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { Heart, Sparkles, ShieldCheck, HeartHandshake, ArrowRight, UserCheck, CheckCircle2 } from 'lucide-react';
+import { CycleRing3D } from '../components/3d/CycleRing3D';
+import { Heart, Sparkles, ArrowRight, ShieldCheck, Lock, Users, Activity } from 'lucide-react';
 import { Disclaimer } from '../components/common/Disclaimer';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { loginAsDemoWoman, loginAsDemoPartner } = useAuth();
-
-  const handleDemoWoman = async () => {
-    await loginAsDemoWoman();
-    navigate('/woman/home');
-  };
-
-  const handleDemoPartner = async () => {
-    await loginAsDemoPartner();
-    navigate('/partner/home');
-  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#FFF0F4] to-[#FDE8EE] flex flex-col justify-between px-4 py-8 max-w-md mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-[#FFF5F7] via-[#FFF0F4] to-[#FDE8EE] flex flex-col justify-between px-4 py-6 max-w-lg mx-auto">
       {/* Top Brand Logo */}
-      <div className="pt-6 text-center">
-        <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center mx-auto shadow-glow mb-4">
-          <Heart className="w-8 h-8 text-white fill-white" />
-        </div>
-        <h1 className="text-3xl font-extrabold font-display tracking-tight text-gray-900 leading-tight">
-          HerCycle
-        </h1>
-        <p className="text-xs font-semibold text-rose-500 uppercase tracking-widest mt-1">
-          Understand her cycle. Support her better.
-        </p>
-      </div>
-
-      {/* Hero Visual Card */}
-      <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 shadow-float border border-rose-100 my-6 text-center">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold mb-3">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Feminine Wellness & Partner Sync</span>
+      <header className="flex items-center justify-between pt-2 pb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-rose-500 to-pink-400 flex items-center justify-center shadow-sm">
+            <Heart className="w-5 h-5 text-white fill-white" />
+          </div>
+          <span className="text-xl font-extrabold font-display tracking-tight text-gray-900">
+            HerCycle
+          </span>
         </div>
 
-        <h2 className="text-xl font-bold font-display text-gray-900 mb-2">
-          Your cycle. Your health. Your privacy.
-        </h2>
+        <button
+          onClick={() => navigate('/login')}
+          className="text-xs font-bold text-rose-600 px-3.5 py-1.5 rounded-full border border-rose-200 bg-white/80 backdrop-blur-sm hover:bg-rose-50 transition"
+        >
+          Sign In
+        </button>
+      </header>
 
-        <p className="text-xs text-gray-600 leading-relaxed max-w-xs mx-auto mb-6">
-          Track your menstrual rhythm, discover phase-based wellness patterns, and safely share only what you choose with your partner with zero leakage.
-        </p>
+      {/* Hero 3D Section */}
+      <main className="space-y-6 my-auto py-2">
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100/70 text-rose-700 text-xs font-bold shadow-xs">
+            <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+            <span>Feminine Wellness & Partner Sync</span>
+          </div>
 
-        {/* Feature Pills */}
-        <div className="grid grid-cols-2 gap-2 text-left text-xs mb-6">
-          <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-100 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-rose-500 shrink-0" />
-            <span className="font-medium text-gray-700">Circular Cycle Ring</span>
+          <h1 className="text-3xl sm:text-4xl font-extrabold font-display tracking-tight text-gray-900 leading-tight">
+            Understand her cycle.<br />
+            <span className="bg-gradient-to-r from-rose-500 to-pink-500 bg-clip-text text-transparent">
+              Support her better.
+            </span>
+          </h1>
+
+          <p className="text-xs sm:text-sm text-gray-600 max-w-xs mx-auto leading-relaxed">
+            A serene sanctuary for her menstrual wellness and a secure, read-only window for her partner.
+          </p>
+        </div>
+
+        {/* 3D Interactive Cycle Ring with Original Serene Woman Illustration */}
+        <div className="py-2">
+          <CycleRing3D
+            currentCycleDay={12}
+            totalCycleLength={28}
+            isLandingPage={true}
+          />
+        </div>
+
+        {/* Phase Color Legend */}
+        <div className="grid grid-cols-4 gap-1.5 max-w-xs mx-auto text-center">
+          <div className="p-2 rounded-2xl bg-white/80 backdrop-blur-sm border border-rose-100/80 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#F43F5E] mx-auto mb-1" />
+            <span className="text-[10px] font-bold text-gray-800 block">Menstrual</span>
+            <span className="text-[9px] text-gray-500">Days 1–5</span>
           </div>
-          <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-100 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-rose-500 shrink-0" />
-            <span className="font-medium text-gray-700">4 Cycle Phases</span>
+          <div className="p-2 rounded-2xl bg-white/80 backdrop-blur-sm border border-pink-100/80 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#EC4899] mx-auto mb-1" />
+            <span className="text-[10px] font-bold text-gray-800 block">Follicular</span>
+            <span className="text-[9px] text-gray-500">Days 6–13</span>
           </div>
-          <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-100 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-rose-500 shrink-0" />
-            <span className="font-medium text-gray-700">Read-Only Partner</span>
+          <div className="p-2 rounded-2xl bg-white/80 backdrop-blur-sm border border-amber-100/80 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#F59E0B] mx-auto mb-1" />
+            <span className="text-[10px] font-bold text-gray-800 block">Ovulation</span>
+            <span className="text-[9px] text-gray-500">Days 14–16</span>
           </div>
-          <div className="p-2.5 rounded-2xl bg-rose-50/60 border border-rose-100 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-rose-500 shrink-0" />
-            <span className="font-medium text-gray-700">100% Private Data</span>
+          <div className="p-2 rounded-2xl bg-white/80 backdrop-blur-sm border border-purple-100/80 shadow-xs">
+            <div className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6] mx-auto mb-1" />
+            <span className="text-[10px] font-bold text-gray-800 block">Luteal</span>
+            <span className="text-[9px] text-gray-500">Days 17–28</span>
           </div>
         </div>
 
-        {/* Main CTA Buttons */}
-        <div className="space-y-2.5">
+        {/* Action Buttons */}
+        <div className="space-y-3 pt-2">
           <button
             onClick={() => navigate('/register')}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-sm shadow-md shadow-rose-200 hover:shadow-lg transition flex items-center justify-center gap-2"
+            className="w-full py-4 rounded-full bg-gradient-to-r from-rose-500 via-pink-500 to-rose-600 text-white font-bold text-base shadow-float hover:shadow-glow transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
-            <span>Create Account</span>
-            <ArrowRight className="w-4 h-4" />
+            <span>Get Started</span>
+            <ArrowRight className="w-5 h-5" />
           </button>
 
           <button
             onClick={() => navigate('/login')}
-            className="w-full py-3 rounded-full bg-white border border-rose-200 text-rose-600 font-bold text-sm hover:bg-rose-50 transition"
+            className="w-full py-3.5 rounded-full bg-white/90 backdrop-blur-md border border-rose-200 text-rose-700 font-bold text-sm shadow-soft hover:bg-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
-            Log In
+            <Users className="w-4 h-4 text-rose-500" />
+            <span>Partner Login</span>
           </button>
         </div>
-      </div>
 
-      {/* Instant Demo Accounts Banner */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-4 border border-rose-100 shadow-soft text-center">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block mb-2">
-          Instant Interactive Demo Testing
-        </span>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={handleDemoWoman}
-            className="p-2.5 rounded-2xl bg-gradient-to-tr from-rose-50 to-pink-50 border border-rose-200 text-left hover:scale-[1.02] transition"
-          >
-            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Sarah (Woman)</span>
-            </div>
-            <span className="text-[10px] text-gray-500 block mt-0.5">
-              Day 12 · 5 months history
-            </span>
-          </button>
-
-          <button
-            onClick={handleDemoPartner}
-            className="p-2.5 rounded-2xl bg-gradient-to-tr from-rose-50 to-pink-50 border border-rose-200 text-left hover:scale-[1.02] transition"
-          >
-            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
-              <HeartHandshake className="w-3.5 h-3.5" />
-              <span>Alex (Partner)</span>
-            </div>
-            <span className="text-[10px] text-gray-500 block mt-0.5">
-              Read-only synced view
-            </span>
-          </button>
+        {/* Security & Privacy Highlights */}
+        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-4 border border-rose-100 shadow-soft grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="p-2">
+            <Lock className="w-4 h-4 text-rose-500 mx-auto mb-1" />
+            <span className="font-bold text-gray-800 text-[11px] block">Zero Data Selling</span>
+            <span className="text-[10px] text-gray-500">100% private</span>
+          </div>
+          <div className="p-2 border-x border-rose-100">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
+            <span className="font-bold text-gray-800 text-[11px] block">Read-Only Partner</span>
+            <span className="text-[10px] text-gray-500">Field-level guards</span>
+          </div>
+          <div className="p-2">
+            <Activity className="w-4 h-4 text-purple-500 mx-auto mb-1" />
+            <span className="font-bold text-gray-800 text-[11px] block">Cycle Intelligence</span>
+            <span className="text-[10px] text-gray-500">Apple x Oura feel</span>
+          </div>
         </div>
-      </div>
+      </main>
 
-      <Disclaimer compact />
+      <footer className="pt-4">
+        <Disclaimer compact />
+      </footer>
     </div>
   );
 };
+
+export default LandingPage;

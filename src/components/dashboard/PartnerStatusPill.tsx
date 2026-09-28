@@ -1,14 +1,15 @@
 import React from 'react';
 import { useCycle } from '../../context/CycleContext';
 import { useNavigate } from 'react-router-dom';
-import { Users, Heart, ChevronRight, Pause, ShieldCheck } from 'lucide-react';
+import { Heart, ChevronRight, Pause, ShieldCheck } from 'lucide-react';
 
 export const PartnerStatusPill: React.FC = () => {
-  const { partnerConnection, sharingPermissions } = useCycle();
+  const { partnerLink, partnerConnection: legacyConnection, sharingPermissions } = useCycle();
+  const partnerConnection = partnerLink || legacyConnection;
   const navigate = useNavigate();
 
-  const isConnected = partnerConnection && partnerConnection.status === 'active';
-  const isPaused = partnerConnection?.is_paused;
+  const isConnected = partnerConnection && (partnerConnection.status === 'approved');
+  const isPaused = partnerConnection?.is_paused || partnerConnection?.status === 'paused';
   const isPending = partnerConnection && partnerConnection.status === 'pending';
 
   const sharedCount = Object.values(sharingPermissions).filter(Boolean).length;
@@ -26,7 +27,7 @@ export const PartnerStatusPill: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-bold text-gray-900 font-display">
               {isConnected
-                ? `Sharing with ${partnerConnection.partner_name || 'Alex'}`
+                ? `Sharing with ${partnerConnection.partner_name || 'Partner'}`
                 : isPending
                 ? 'Partner Connection Pending'
                 : 'Partner Sharing'}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useCycle } from '../../context/CycleContext';
 import { FlowLevel, MoodLevel, EnergyLevel } from '../../types/database';
 import { SYMPTOMS_LIST } from '../../lib/constants';
-import { Droplet, Moon, GlassWater, Scale, Heart, Sparkles, Check } from 'lucide-react';
+import { Droplet, Moon, GlassWater, Heart, Sparkles, Check } from 'lucide-react';
 
 export const TodayCheckIn: React.FC = () => {
   const { todayLog, saveTodayCheckIn } = useCycle();

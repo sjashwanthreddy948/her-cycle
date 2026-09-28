@@ -3,395 +3,405 @@ import {
   CycleProfile, 
   PeriodLog, 
   DailyLog, 
-  PartnerConnection, 
+  PartnerLink,
+  PartnerCode,
   SharingPermissionsMap, 
-  PartnerNotificationPref,
-  PermissionKey,
-  FlowLevel
+  PermissionKey
 } from '../types/database';
-import { 
-  DEMO_WOMAN_USER, 
-  DEMO_PARTNER_USER, 
-  DEMO_CYCLE_PROFILE, 
-  generateDemoPeriodLogs, 
-  generateDemoDailyLogs, 
-  DEMO_PARTNER_CONNECTION, 
-  DEMO_SHARING_PERMISSIONS, 
-  DEMO_NOTIFICATIONS 
-} from './seedData';
 import { calculateCycleState } from './cycleCalculator';
 import { supabase, isSupabaseConfigured } from './supabase';
 
-const DB_KEY = 'hercycle_db_v1';
-
-interface StorageSchema {
-  profiles: UserProfile[];
-  cycleProfiles: Record<string, CycleProfile>;
-  periodLogs: PeriodLog[];
-  dailyLogs: DailyLog[];
-  partnerConnections: PartnerConnection[];
-  sharingPermissions: Record<string, SharingPermissionsMap>; // keyed by connection_id
-  partnerNotifications: Record<string, PartnerNotificationPref[]>;
-}
-
-// Initial seed store
-function getInitialData(): StorageSchema {
-  return {
-    profiles: [DEMO_WOMAN_USER, DEMO_PARTNER_USER],
-    cycleProfiles: {
-      [DEMO_WOMAN_USER.id]: DEMO_CYCLE_PROFILE,
-    },
-    periodLogs: generateDemoPeriodLogs(),
-    dailyLogs: generateDemoDailyLogs(),
-    partnerConnections: [DEMO_PARTNER_CONNECTION],
-    sharingPermissions: {
-      [DEMO_PARTNER_CONNECTION.id]: { ...DEMO_SHARING_PERMISSIONS },
-    },
-    partnerNotifications: {
-      [DEMO_PARTNER_CONNECTION.id]: [...DEMO_NOTIFICATIONS],
-    },
-  };
-}
-
-function loadStore(): StorageSchema {
-  try {
-    const raw = localStorage.getItem(DB_KEY);
-    if (!raw) {
-      const initial = getInitialData();
-      saveStore(initial);
-      return initial;
-    }
-    const parsed = JSON.parse(raw);
-    // Ensure all collections exist
-    if (!parsed.profiles || !parsed.periodLogs || !parsed.dailyLogs) {
-      const initial = getInitialData();
-      saveStore(initial);
-      return initial;
-    }
-    return parsed;
-  } catch (e) {
-    console.error('Error loading HerCycle store, resetting to initial seed:', e);
-    const initial = getInitialData();
-    saveStore(initial);
-    return initial;
+function checkClient() {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase backend is not configured. Please supply VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.');
   }
-}
-
-function saveStore(store: StorageSchema): void {
-  try {
-    localStorage.setItem(DB_KEY, JSON.stringify(store));
-  } catch (e) {
-    console.error('Error saving HerCycle store:', e);
-  }
+  return supabase;
 }
 
 export const db = {
-  // Profiles
+  // 1. Profiles
   async getProfile(userId: string): Promise<UserProfile | null> {
-    if (isSupabaseConfigured && supabase) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (data) return data as UserProfile;
-    }
-    const store = loadStore();
-    return store.profiles.find(p => p.id === userId) || null;
+    const client = checkClient();
+    const { data, error } = await client
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as UserProfile | null;
   },
 
   async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
-    const store = loadStore();
-    const index = store.profiles.findIndex(p => p.id === userId);
-    if (index === -1) throw new Error('User not found');
-    const updated = { ...store.profiles[index], ...updates, updated_at: new Date().toISOString() };
-    store.profiles[index] = updated;
-    saveStore(store);
-    return updated;
+    const client = checkClient();
+    // role is immutable per security policy, strip if present
+    const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
+    delete safeUpdates.role;
+    delete safeUpdates.id;
+
+    const { data, error } = await client
+      .from('profiles')
+      .update(safeUpdates)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as UserProfile;
   },
 
-  async createProfile(profile: UserProfile): Promise<UserProfile> {
-    const store = loadStore();
-    const existing = store.profiles.find(p => p.id === profile.id || p.email === profile.email);
-    if (existing) return existing;
-    store.profiles.push(profile);
-    saveStore(store);
-    return profile;
-  },
-
-  // Cycle Profile
-  async getCycleProfile(userId: string): Promise<CycleProfile> {
-    const store = loadStore();
-    if (!store.cycleProfiles[userId]) {
-      const def: CycleProfile = {
+  // 2. Active Session Enforcement
+  async upsertActiveSession(userId: string, sessionId: string, device?: string): Promise<void> {
+    const client = checkClient();
+    const { error } = await client
+      .from('active_sessions')
+      .upsert({
         user_id: userId,
-        average_cycle_length: 28,
-        average_period_length: 5,
-        last_period_start: new Date().toISOString().split('T')[0],
-        goals: ['cycle_tracking'],
-        created_at: new Date().toISOString(),
+        session_id: sessionId,
+        device: device || (typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : 'Browser'),
         updated_at: new Date().toISOString(),
-      };
-      store.cycleProfiles[userId] = def;
-      saveStore(store);
-      return def;
-    }
-    return store.cycleProfiles[userId];
+      });
+    if (error) console.error('Failed to register active session:', error.message);
+  },
+
+  async getActiveSession(userId: string): Promise<string | null> {
+    const client = checkClient();
+    const { data, error } = await client
+      .from('active_sessions')
+      .select('session_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data.session_id;
+  },
+
+  // 3. Cycle Profile
+  async getCycleProfile(userId: string): Promise<CycleProfile | null> {
+    const client = checkClient();
+    const { data, error } = await client
+      .from('cycle_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as CycleProfile | null;
   },
 
   async updateCycleProfile(userId: string, updates: Partial<CycleProfile>): Promise<CycleProfile> {
-    const store = loadStore();
-    const current = await this.getCycleProfile(userId);
-    const updated = { ...current, ...updates, updated_at: new Date().toISOString() };
-    store.cycleProfiles[userId] = updated;
-    saveStore(store);
-    return updated;
+    const client = checkClient();
+    const { data, error } = await client
+      .from('cycle_profiles')
+      .upsert({
+        user_id: userId,
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as CycleProfile;
   },
 
-  // Period Logs
+  // 4. Period Logs
   async getPeriodLogs(userId: string): Promise<PeriodLog[]> {
-    const store = loadStore();
-    return store.periodLogs
-      .filter(p => p.user_id === userId)
-      .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+    const client = checkClient();
+    const { data, error } = await client
+      .from('period_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('start_date', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as PeriodLog[];
   },
 
   async addPeriodLog(log: Omit<PeriodLog, 'id'>): Promise<PeriodLog> {
-    const store = loadStore();
-    const newLog: PeriodLog = {
-      ...log,
-      id: `period-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    store.periodLogs.push(newLog);
-    // Also update cycle profile last_period_start if this log is the most recent
-    if (store.cycleProfiles[log.user_id]) {
-      const currentLast = store.cycleProfiles[log.user_id].last_period_start;
-      if (!currentLast || new Date(log.start_date) > new Date(currentLast)) {
-        store.cycleProfiles[log.user_id].last_period_start = log.start_date;
-      }
-    }
-    saveStore(store);
-    return newLog;
+    const client = checkClient();
+    const { data, error } = await client
+      .from('period_logs')
+      .insert({
+        ...log,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Keep cycle_profiles last_period_start in sync
+    await client
+      .from('cycle_profiles')
+      .update({ last_period_start: log.start_date, updated_at: new Date().toISOString() })
+      .eq('user_id', log.user_id);
+
+    return data as PeriodLog;
   },
 
   async updatePeriodLog(id: string, updates: Partial<PeriodLog>): Promise<PeriodLog> {
-    const store = loadStore();
-    const index = store.periodLogs.findIndex(p => p.id === id);
-    if (index === -1) throw new Error('Period log not found');
-    const updated = { ...store.periodLogs[index], ...updates, updated_at: new Date().toISOString() };
-    store.periodLogs[index] = updated;
-    saveStore(store);
-    return updated;
+    const client = checkClient();
+    const { data, error } = await client
+      .from('period_logs')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as PeriodLog;
   },
 
   async deletePeriodLog(id: string): Promise<void> {
-    const store = loadStore();
-    store.periodLogs = store.periodLogs.filter(p => p.id !== id);
-    saveStore(store);
+    const client = checkClient();
+    const { error } = await client.from('period_logs').delete().eq('id', id);
+    if (error) throw error;
   },
 
-  // Daily Logs
+  // 5. Daily Logs
   async getDailyLogs(userId: string): Promise<DailyLog[]> {
-    const store = loadStore();
-    return store.dailyLogs
-      .filter(d => d.user_id === userId)
-      .sort((a, b) => new Date(b.log_date).getTime() - new Date(a.log_date).getTime());
+    const client = checkClient();
+    const { data, error } = await client
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('log_date', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as DailyLog[];
   },
 
   async getDailyLogForDate(userId: string, dateStr: string): Promise<DailyLog | null> {
-    const store = loadStore();
-    return store.dailyLogs.find(d => d.user_id === userId && d.log_date === dateStr) || null;
+    const client = checkClient();
+    const { data, error } = await client
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('log_date', dateStr)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as DailyLog | null;
   },
 
   async saveDailyLog(log: Omit<DailyLog, 'id'>): Promise<DailyLog> {
-    const store = loadStore();
-    const index = store.dailyLogs.findIndex(d => d.user_id === log.user_id && d.log_date === log.log_date);
-    
-    let result: DailyLog;
-    if (index >= 0) {
-      result = {
-        ...store.dailyLogs[index],
-        ...log,
-        updated_at: new Date().toISOString(),
-      };
-      store.dailyLogs[index] = result;
-    } else {
-      result = {
-        ...log,
-        id: `daily-${log.log_date}-${Math.random().toString(36).substr(2, 6)}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      store.dailyLogs.push(result);
-    }
+    const client = checkClient();
+    const { data, error } = await client
+      .from('daily_logs')
+      .upsert(
+        {
+          ...log,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,log_date' }
+      )
+      .select()
+      .single();
 
-    // Auto-update period log if flow is indicated
-    if (log.flow && log.flow !== 'none') {
-      const existingPeriod = store.periodLogs.find(p => p.user_id === log.user_id && p.start_date === log.log_date);
-      if (!existingPeriod) {
-        // Look if it extends an active period
-        const latestPeriod = store.periodLogs
-          .filter(p => p.user_id === log.user_id)
-          .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())[0];
-        
-        if (latestPeriod && Math.abs(new Date(log.log_date).getTime() - new Date(latestPeriod.start_date).getTime()) < 8 * 24 * 3600 * 1000) {
-          latestPeriod.end_date = log.log_date;
-        }
-      }
-    }
-
-    saveStore(store);
-    return result;
+    if (error) throw error;
+    return data as DailyLog;
   },
 
-  // Partner Connection Management
-  async getPartnerConnection(userId: string, role: 'woman' | 'partner'): Promise<PartnerConnection | null> {
-    const store = loadStore();
+  // 6. Partner Codes (Server generated, HER-XXXXXX, 24h expiration)
+  async getActivePartnerCode(womanId: string): Promise<PartnerCode | null> {
+    const client = checkClient();
+    const { data, error } = await client
+      .from('partner_codes')
+      .select('*')
+      .eq('woman_id', womanId)
+      .eq('used', false)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (error) throw error;
+    return data as PartnerCode | null;
+  },
+
+  async generatePartnerCode(): Promise<string> {
+    const client = checkClient();
+    // Security Definer function on Postgres
+    const { data, error } = await client.rpc('generate_partner_code');
+    if (error) throw error;
+    return data as string;
+  },
+
+  async redeemPartnerCode(code: string): Promise<{ success: boolean; link_id: string; status: string }> {
+    const client = checkClient();
+    // Security Definer function with rate limit check on Postgres
+    const { data, error } = await client.rpc('redeem_partner_code', {
+      code_input: code.trim().toUpperCase(),
+    });
+    if (error) throw error;
+    return data;
+  },
+
+  // 7. Partner Links
+  async getPartnerLink(userId: string, role: 'woman' | 'partner'): Promise<PartnerLink | null> {
+    const client = checkClient();
     if (role === 'woman') {
-      return store.partnerConnections.find(c => c.woman_user_id === userId && c.status !== 'disconnected') || null;
+      const { data, error } = await client
+        .from('partner_links')
+        .select(`
+          *,
+          partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
+        `)
+        .eq('woman_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      const p = data.partner as any;
+      return {
+        ...data,
+        partner_name: p?.full_name,
+        partner_avatar_url: p?.avatar_url,
+        partner_email: p?.email,
+      } as PartnerLink;
     } else {
-      return store.partnerConnections.find(c => c.partner_user_id === userId && c.status !== 'disconnected') || null;
+      const { data, error } = await client
+        .from('partner_links')
+        .select(`
+          *,
+          woman:profiles!partner_links_woman_id_fkey(full_name, avatar_url, email)
+        `)
+        .eq('partner_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      const w = data.woman as any;
+      return {
+        ...data,
+        woman_name: w?.full_name,
+        woman_avatar_url: w?.avatar_url,
+      } as PartnerLink;
     }
   },
 
-  async generateConnectionCode(womanUserId: string): Promise<string> {
-    const store = loadStore();
-    // 6-character clean alphanumeric code
-    const code = 'HER-' + Math.floor(100 + Math.random() * 900);
-    let conn = store.partnerConnections.find(c => c.woman_user_id === womanUserId && c.status !== 'disconnected');
-    
-    if (conn) {
-      conn.connection_code = code;
-    } else {
-      const woman = store.profiles.find(p => p.id === womanUserId);
-      conn = {
-        id: `conn-${Date.now()}`,
-        woman_user_id: womanUserId,
-        status: 'pending',
-        connection_code: code,
-        is_paused: false,
-        created_at: new Date().toISOString(),
-        woman_name: woman?.full_name || 'Sarah',
-      };
-      store.partnerConnections.push(conn);
-      // Initialize default permissions
-      store.sharingPermissions[conn.id] = { ...DEMO_SHARING_PERMISSIONS };
-      store.partnerNotifications[conn.id] = [...DEMO_NOTIFICATIONS];
+  async approvePartnerLink(linkId: string): Promise<void> {
+    const client = checkClient();
+    const { error } = await client
+      .from('partner_links')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', linkId);
+
+    if (error) throw error;
+  },
+
+  async declinePartnerLink(linkId: string): Promise<void> {
+    const client = checkClient();
+    const { error } = await client.from('partner_links').delete().eq('id', linkId);
+    if (error) throw error;
+  },
+
+  async togglePausePartner(linkId: string, pause: boolean): Promise<boolean> {
+    const client = checkClient();
+    const { error } = await client
+      .from('partner_links')
+      .update({ is_paused: pause })
+      .eq('id', linkId);
+
+    if (error) throw error;
+    return pause;
+  },
+
+  async disconnectPartner(linkId: string): Promise<void> {
+    const client = checkClient();
+    const { error } = await client.from('partner_links').delete().eq('id', linkId);
+    if (error) throw error;
+  },
+
+  // 8. Sharing Permissions
+  async getSharingPermissions(linkId: string): Promise<SharingPermissionsMap> {
+    const client = checkClient();
+    const { data, error } = await client
+      .from('sharing_permissions')
+      .select('permission_name, enabled')
+      .eq('link_id', linkId);
+
+    if (error) throw error;
+
+    const map: Partial<SharingPermissionsMap> = {};
+    (data || []).forEach(row => {
+      map[row.permission_name as PermissionKey] = row.enabled;
+    });
+
+    return {
+      cycle_phase: map.cycle_phase ?? true,
+      cycle_day: map.cycle_day ?? true,
+      period_status: map.period_status ?? true,
+      estimated_next_period: map.estimated_next_period ?? true,
+      mood: map.mood ?? true,
+      energy: map.energy ?? true,
+      symptoms: map.symptoms ?? false,
+      flow: map.flow ?? false,
+      sleep: map.sleep ?? false,
+      notes: false, // NEVER SHARED
+      weight: false, // NEVER SHARED
+    };
+  },
+
+  async updateSharingPermission(linkId: string, key: PermissionKey, enabled: boolean): Promise<void> {
+    const client = checkClient();
+    // Safety check: notes and weight must never be enabled
+    if (key === 'notes' || key === 'weight') {
+      throw new Error('Private notes and weight cannot be shared with partner.');
     }
-    saveStore(store);
-    return code;
+
+    const { error } = await client
+      .from('sharing_permissions')
+      .upsert(
+        {
+          link_id: linkId,
+          permission_name: key,
+          enabled,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'link_id,permission_name' }
+      );
+
+    if (error) throw error;
   },
 
-  async requestConnectionByCode(partnerUserId: string, code: string): Promise<PartnerConnection> {
-    const store = loadStore();
-    const cleanCode = code.trim().toUpperCase();
-    const conn = store.partnerConnections.find(c => c.connection_code.toUpperCase() === cleanCode);
-    if (!conn) {
-      throw new Error('Invalid connection code. Please verify the code with your partner.');
-    }
-    const partner = store.profiles.find(p => p.id === partnerUserId);
-    conn.partner_user_id = partnerUserId;
-    conn.partner_email = partner?.email;
-    conn.partner_name = partner?.full_name;
-    conn.status = 'pending'; // Pending woman approval!
-    saveStore(store);
-    return conn;
+  async applyPreset(linkId: string, permissions: SharingPermissionsMap): Promise<void> {
+    const client = checkClient();
+    const entries = (Object.keys(permissions) as PermissionKey[]).map(key => ({
+      link_id: linkId,
+      permission_name: key,
+      // Enforce zero exposure for notes and weight
+      enabled: (key === 'notes' || key === 'weight') ? false : Boolean(permissions[key]),
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error } = await client
+      .from('sharing_permissions')
+      .upsert(entries, { onConflict: 'link_id,permission_name' });
+
+    if (error) throw error;
   },
 
-  async approveConnection(connectionId: string): Promise<PartnerConnection> {
-    const store = loadStore();
-    const conn = store.partnerConnections.find(c => c.id === connectionId);
-    if (!conn) throw new Error('Connection not found');
-    conn.status = 'active';
-    conn.approved_at = new Date().toISOString();
-    saveStore(store);
-    return conn;
-  },
-
-  async declineConnection(connectionId: string): Promise<void> {
-    const store = loadStore();
-    const conn = store.partnerConnections.find(c => c.id === connectionId);
-    if (conn) {
-      conn.status = 'rejected';
-      conn.partner_user_id = undefined;
-      conn.partner_email = undefined;
-      conn.partner_name = undefined;
-      saveStore(store);
-    }
-  },
-
-  async togglePauseSharing(connectionId: string, pause: boolean): Promise<boolean> {
-    const store = loadStore();
-    const conn = store.partnerConnections.find(c => c.id === connectionId);
-    if (!conn) throw new Error('Connection not found');
-    conn.is_paused = pause;
-    saveStore(store);
-    return conn.is_paused;
-  },
-
-  async removePartner(connectionId: string): Promise<void> {
-    const store = loadStore();
-    const conn = store.partnerConnections.find(c => c.id === connectionId);
-    if (conn) {
-      conn.status = 'disconnected';
-      conn.partner_user_id = undefined;
-      saveStore(store);
-    }
-  },
-
-  // Sharing Permissions
-  async getSharingPermissions(connectionId: string): Promise<SharingPermissionsMap> {
-    const store = loadStore();
-    return store.sharingPermissions[connectionId] || { ...DEMO_SHARING_PERMISSIONS };
-  },
-
-  async updateSharingPermission(connectionId: string, key: PermissionKey, enabled: boolean): Promise<SharingPermissionsMap> {
-    const store = loadStore();
-    if (!store.sharingPermissions[connectionId]) {
-      store.sharingPermissions[connectionId] = { ...DEMO_SHARING_PERMISSIONS };
-    }
-    store.sharingPermissions[connectionId][key] = enabled;
-    saveStore(store);
-    return store.sharingPermissions[connectionId];
-  },
-
-  async applyPreset(connectionId: string, presetPermissions: SharingPermissionsMap): Promise<SharingPermissionsMap> {
-    const store = loadStore();
-    store.sharingPermissions[connectionId] = { ...presetPermissions };
-    saveStore(store);
-    return store.sharingPermissions[connectionId];
-  },
-
-  // Notifications
-  async getPartnerNotifications(connectionId: string): Promise<PartnerNotificationPref[]> {
-    const store = loadStore();
-    return store.partnerNotifications[connectionId] || [...DEMO_NOTIFICATIONS];
-  },
-
-  async updatePartnerNotification(connectionId: string, type: string, enabled: boolean): Promise<void> {
-    const store = loadStore();
-    const list = store.partnerNotifications[connectionId] || [...DEMO_NOTIFICATIONS];
-    const item = list.find(n => n.type === type);
-    if (item) {
-      item.enabled = enabled;
-    } else {
-      list.push({ id: `notif-${Date.now()}`, connection_id: connectionId, type: type as any, enabled, discreet_wording: true });
-    }
-    store.partnerNotifications[connectionId] = list;
-    saveStore(store);
-  },
-
-  // SECURE BACKEND-ENFORCED PARTNER ACCESS
-  // Requirement 18 & 33: Never send forbidden data to partner frontend!
+  // 9. SECURE PARTNER VIEW (Database-Enforced Read-Only View)
   async getPartnerViewData(partnerUserId: string) {
-    const store = loadStore();
-    const conn = store.partnerConnections.find(
-      c => c.partner_user_id === partnerUserId && c.status === 'active'
-    );
-
-    if (!conn) {
+    const client = checkClient();
+    
+    // Check if partner has any link first
+    const link = await this.getPartnerLink(partnerUserId, 'partner');
+    if (!link) {
       return {
         isConnected: false,
         status: 'not_connected',
         womanName: null,
+        womanAvatarUrl: null,
         isPaused: false,
         permissions: {} as Partial<SharingPermissionsMap>,
         cycleData: null,
@@ -400,11 +410,26 @@ export const db = {
       };
     }
 
-    if (conn.is_paused) {
+    if (link.status === 'pending') {
+      return {
+        isConnected: true,
+        status: 'pending',
+        womanName: link.woman_name || 'Partner',
+        womanAvatarUrl: link.woman_avatar_url || null,
+        isPaused: false,
+        permissions: {} as Partial<SharingPermissionsMap>,
+        cycleData: null,
+        todayLog: null,
+        calendarDays: [],
+      };
+    }
+
+    if (link.is_paused) {
       return {
         isConnected: true,
         status: 'paused',
-        womanName: conn.woman_name || 'Sarah',
+        womanName: link.woman_name || 'Partner',
+        womanAvatarUrl: link.woman_avatar_url || null,
         isPaused: true,
         permissions: {} as Partial<SharingPermissionsMap>,
         cycleData: null,
@@ -413,71 +438,138 @@ export const db = {
       };
     }
 
-    const womanId = conn.woman_user_id;
-    const permissions = store.sharingPermissions[conn.id] || { ...DEMO_SHARING_PERMISSIONS };
-    const cycleProfile = store.cycleProfiles[womanId] || DEMO_CYCLE_PROFILE;
-    const periodLogs = store.periodLogs.filter(p => p.user_id === womanId);
-    const dailyLogs = store.dailyLogs.filter(d => d.user_id === womanId);
+    // Query the database view `partner_view`
+    const { data: viewData, error } = await client
+      .from('partner_view')
+      .select('*')
+      .maybeSingle();
 
-    // Compute raw cycle state
-    const rawCycle = calculateCycleState(cycleProfile, periodLogs);
+    if (error || !viewData) {
+      return {
+        isConnected: true,
+        status: link.status,
+        womanName: link.woman_name || 'Partner',
+        womanAvatarUrl: link.woman_avatar_url || null,
+        isPaused: link.is_paused,
+        permissions: {} as Partial<SharingPermissionsMap>,
+        cycleData: null,
+        todayLog: null,
+        calendarDays: [],
+      };
+    }
 
-    // Mask according to active permissions
-    const sanitizedCycle = {
-      currentPhase: permissions.cycle_phase ? rawCycle.currentPhase : null,
-      phaseDisplayName: permissions.cycle_phase ? rawCycle.phaseDisplayName : null,
-      currentCycleDay: permissions.cycle_day ? rawCycle.currentCycleDay : null,
-      totalCycleLength: permissions.cycle_day ? rawCycle.totalCycleLength : null,
-      isCurrentlyOnPeriod: permissions.period_status ? rawCycle.isCurrentlyOnPeriod : null,
-      daysUntilNextPeriod: permissions.estimated_next_period ? rawCycle.daysUntilNextPeriod : null,
-      estimatedNextPeriodStart: permissions.estimated_next_period ? rawCycle.estimatedNextPeriodStart : null,
-      progressPercent: permissions.cycle_day ? rawCycle.progressPercent : 0,
+    const perms: SharingPermissionsMap = viewData.permissions || {};
+    const womanId = viewData.woman_id;
+
+    // Fetch cycle state using cycleCalculator
+    const cycleProfile: CycleProfile = {
+      user_id: womanId,
+      average_cycle_length: viewData.average_cycle_length || 28,
+      average_period_length: viewData.average_period_length || 5,
+      last_period_start: viewData.last_period_start,
+      goals: [],
     };
 
-    // Today's log sanitized
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayRaw = dailyLogs.find(d => d.log_date === todayStr);
+    // If period status permitted, fetch period logs
+    let periods: PeriodLog[] = [];
+    if (perms.period_status) {
+      const { data: pData } = await client
+        .from('period_logs')
+        .select('*')
+        .eq('user_id', womanId)
+        .order('start_date', { ascending: false });
+      periods = (pData || []) as PeriodLog[];
+    }
 
-    const sanitizedToday = todayRaw ? {
-      mood: permissions.mood ? todayRaw.mood : null,
-      energy: permissions.energy ? todayRaw.energy : null,
-      flow: permissions.flow ? todayRaw.flow : null,
-      sleep_hours: permissions.sleep ? todayRaw.sleep_hours : null,
-      symptoms: permissions.symptoms ? (todayRaw.symptoms || []) : [],
-      notes: permissions.notes ? todayRaw.notes : null,
-      // weight is NEVER passed unless permission explicitly on
-      weight: permissions.weight ? todayRaw.weight : null,
+    const rawCycle = calculateCycleState(cycleProfile, periods);
+
+    const sanitizedCycle = {
+      currentPhase: perms.cycle_phase ? rawCycle.currentPhase : null,
+      phaseDisplayName: perms.cycle_phase ? rawCycle.phaseDisplayName : null,
+      currentCycleDay: perms.cycle_day ? rawCycle.currentCycleDay : null,
+      totalCycleLength: perms.cycle_day ? rawCycle.totalCycleLength : null,
+      isCurrentlyOnPeriod: perms.period_status ? rawCycle.isCurrentlyOnPeriod : null,
+      daysUntilNextPeriod: perms.estimated_next_period ? rawCycle.daysUntilNextPeriod : null,
+      estimatedNextPeriodStart: perms.estimated_next_period ? rawCycle.estimatedNextPeriodStart : null,
+      progressPercent: perms.cycle_day ? rawCycle.progressPercent : 0,
+    };
+
+    // Today's log
+    const todayStr = new Date().toISOString().split('T')[0];
+    const { data: tData } = await client
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', womanId)
+      .eq('log_date', todayStr)
+      .maybeSingle();
+
+    const sanitizedToday = tData ? {
+      mood: perms.mood ? tData.mood : null,
+      energy: perms.energy ? tData.energy : null,
+      flow: perms.flow ? tData.flow : null,
+      sleep_hours: perms.sleep ? tData.sleep_hours : null,
+      symptoms: perms.symptoms ? (tData.symptoms || []) : [],
+      // notes & weight are NEVER sent
+      notes: null,
+      weight: null,
     } : null;
 
-    // Calendar sanitized for current month
-    const sanitizedCalendar = dailyLogs.map(dl => ({
+    // Monthly calendar days
+    const { data: allDailies } = await client
+      .from('daily_logs')
+      .select('log_date, flow, mood, energy, symptoms')
+      .eq('user_id', womanId)
+      .order('log_date', { ascending: false })
+      .limit(60);
+
+    const sanitizedCalendar = (allDailies || []).map(dl => ({
       date: dl.log_date,
-      hasPeriod: permissions.period_status && (dl.flow && dl.flow !== 'none'),
-      mood: permissions.mood ? dl.mood : undefined,
-      energy: permissions.energy ? dl.energy : undefined,
-      symptoms: permissions.symptoms ? dl.symptoms : [],
+      hasPeriod: perms.period_status && (dl.flow && dl.flow !== 'none'),
+      mood: perms.mood ? dl.mood : undefined,
+      energy: perms.energy ? dl.energy : undefined,
+      symptoms: perms.symptoms ? dl.symptoms : [],
     }));
 
     return {
       isConnected: true,
-      status: 'active',
-      womanName: conn.woman_name || 'Sarah',
+      status: 'approved',
+      womanName: viewData.woman_name,
+      womanAvatarUrl: viewData.woman_avatar_url,
       isPaused: false,
-      permissions,
+      permissions: perms,
       cycleData: sanitizedCycle,
       todayLog: sanitizedToday,
       calendarDays: sanitizedCalendar,
     };
   },
 
-  // Privacy & Data export
+  // 10. Privacy, Export & Cascading Account Deletion
+  async deleteUserAccount(): Promise<void> {
+    const client = checkClient();
+    const { error } = await client.rpc('delete_user_account');
+    if (error) {
+      // Fallback: delete profile manually (cascades)
+      const { data: userData } = await client.auth.getUser();
+      if (userData?.user?.id) {
+        await client.from('profiles').delete().eq('id', userData.user.id);
+      }
+    }
+  },
+
   async exportAllDataJson(userId: string): Promise<string> {
-    const store = loadStore();
+    const client = checkClient();
+    const [profile, cycleProfile, periodLogs, dailyLogs] = await Promise.all([
+      client.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      client.from('cycle_profiles').select('*').eq('user_id', userId).maybeSingle(),
+      client.from('period_logs').select('*').eq('user_id', userId),
+      client.from('daily_logs').select('*').eq('user_id', userId),
+    ]);
+
     const data = {
-      profile: store.profiles.find(p => p.id === userId),
-      cycleProfile: store.cycleProfiles[userId],
-      periodLogs: store.periodLogs.filter(p => p.user_id === userId),
-      dailyLogs: store.dailyLogs.filter(d => d.user_id === userId),
+      profile: profile.data,
+      cycleProfile: cycleProfile.data,
+      periodLogs: periodLogs.data || [],
+      dailyLogs: dailyLogs.data || [],
       exportedAt: new Date().toISOString(),
       appName: 'HerCycle',
     };
@@ -485,10 +577,15 @@ export const db = {
   },
 
   async exportDataCsv(userId: string): Promise<string> {
-    const store = loadStore();
-    const daily = store.dailyLogs.filter(d => d.user_id === userId);
+    const client = checkClient();
+    const { data: daily } = await client
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('log_date', { ascending: false });
+
     const headers = ['Date', 'Flow', 'Mood', 'Energy', 'Sleep Hours', 'Water Glasses', 'Weight', 'Symptoms', 'Notes'];
-    const rows = daily.map(d => [
+    const rows = (daily || []).map(d => [
       d.log_date,
       d.flow || '',
       d.mood || '',
@@ -500,23 +597,5 @@ export const db = {
       `"${(d.notes || '').replace(/"/g, '""')}"`,
     ]);
     return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  },
-
-  async deleteUserData(userId: string): Promise<void> {
-    const store = loadStore();
-    store.profiles = store.profiles.filter(p => p.id !== userId);
-    delete store.cycleProfiles[userId];
-    store.periodLogs = store.periodLogs.filter(p => p.user_id !== userId);
-    store.dailyLogs = store.dailyLogs.filter(d => d.user_id !== userId);
-    store.partnerConnections = store.partnerConnections.filter(
-      c => c.woman_user_id !== userId && c.partner_user_id !== userId
-    );
-    saveStore(store);
-  },
-
-  // Reset to demo state
-  resetToDemo(): void {
-    const initial = getInitialData();
-    saveStore(initial);
   }
 };

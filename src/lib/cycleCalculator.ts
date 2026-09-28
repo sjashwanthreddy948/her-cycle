@@ -39,16 +39,18 @@ export function calculateCycleState(
     (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
   );
 
+  const hasLoggedCycle = Boolean(sortedPeriods.length > 0 || cycleProfile.last_period_start);
+
   const lastPeriod = sortedPeriods.find(p => parseDateYMD(p.start_date) <= targetDate) || {
-    start_date: cycleProfile.last_period_start || formatDateYMD(addDays(targetDate, -11)),
+    start_date: cycleProfile.last_period_start || formatDateYMD(targetDate),
     flow: 'medium' as const,
   };
 
   const lastPeriodStart = parseDateYMD(lastPeriod.start_date);
   const rawDayDiff = diffDays(targetDate, lastPeriodStart);
 
-  // Cycle day is 1-indexed. If rawDayDiff is negative or > cycleLength * 2, wrap or clamp
-  const currentCycleDay = (rawDayDiff % cycleLength) + 1;
+  // Cycle day is 1-indexed if logged, else 0
+  const currentCycleDay = hasLoggedCycle ? ((rawDayDiff % cycleLength) + 1) : 0;
 
   // Ovulation typically occurs around ~14 days before the next period (Day 14 in a 28-day cycle)
   const ovulationDay = Math.max(12, cycleLength - 14);
@@ -84,7 +86,7 @@ export function calculateCycleState(
   const nextPeriodEndDate = addDays(nextPeriodStartDate, periodLength - 1);
 
   // Current active period check
-  const isCurrentlyOnPeriod = currentCycleDay <= periodLength;
+  const isCurrentlyOnPeriod = hasLoggedCycle && currentCycleDay > 0 && currentCycleDay <= periodLength;
   const currentFlow = isCurrentlyOnPeriod ? (lastPeriod.flow || 'medium') : 'none';
 
   // Fertile window dates
@@ -111,6 +113,7 @@ export function calculateCycleState(
     estimatedOvulationDate: formatDateYMD(ovulationDate),
     progressPercent,
     phaseProgressPercent: progressPercent,
+    hasLoggedCycle,
   };
 }
 

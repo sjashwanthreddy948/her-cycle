@@ -5,6 +5,7 @@ import { CycleProvider } from './context/CycleContext';
 import { Header } from './components/common/Header';
 import { Navbar } from './components/common/Navbar';
 import { ToastContainer } from './components/common/ToastContainer';
+import { BackendNotConfigured } from './components/common/BackendNotConfigured';
 
 // Auth Pages
 import { LandingPage } from './pages/LandingPage';
@@ -29,19 +30,71 @@ import { PartnerSupportPage } from './pages/partner/PartnerSupportPage';
 import { PartnerProfilePage } from './pages/partner/PartnerProfilePage';
 import { PartnerConnectPage } from './pages/partner/PartnerConnectPage';
 
+// Protected Route Guard with strict role isolation
+const ProtectedRoute: React.FC<{
+  allowedRole: 'woman' | 'partner';
+  children: React.ReactNode;
+}> = ({ allowedRole, children }) => {
+  const { user, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FFF5F7]">
+        <div className="w-8 h-8 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Strict role enforcement: partner cannot open /woman/* and woman cannot open /partner/*
+  if (user.role !== allowedRole) {
+    return <Navigate to={user.role === 'partner' ? '/partner/home' : '/woman/home'} replace />;
+  }
+
+  return <>{children}</>;
+};
+
 // Shell Layout Wrapper
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, isConfigured, sessionError, logout } = useAuth();
   const location = useLocation();
+
+  if (!isConfigured) {
+    return <BackendNotConfigured />;
+  }
 
   const isPublicRoute = ['/', '/login', '/register', '/forgot-password'].includes(location.pathname);
 
   if (isPublicRoute) {
-    return <main className="min-h-screen">{children}</main>;
+    return (
+      <main className="min-h-screen relative">
+        {sessionError && (
+          <div className="fixed top-4 left-4 right-4 max-w-md mx-auto z-50 p-3 bg-amber-50 border border-amber-300 rounded-2xl text-xs text-amber-800 shadow-float flex items-center justify-between">
+            <span>{sessionError}</span>
+            <button
+              onClick={() => logout()}
+              className="text-xs font-bold text-amber-900 underline ml-2"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        {children}
+      </main>
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#FFF5F7] flex flex-col justify-between">
+      {sessionError && (
+        <div className="bg-amber-100 border-b border-amber-300 p-2 text-center text-xs text-amber-900 font-semibold">
+          {sessionError}
+        </div>
+      )}
       <Header />
       <main className="flex-1 max-w-md w-full mx-auto pb-6">
         {children}
@@ -65,22 +118,22 @@ export const App: React.FC = () => {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-              {/* Woman App */}
-              <Route path="/woman/home" element={<WomanHomePage />} />
-              <Route path="/woman/calendar" element={<WomanCalendarPage />} />
-              <Route path="/woman/log" element={<WomanLogPage />} />
-              <Route path="/woman/insights" element={<WomanInsightsPage />} />
-              <Route path="/woman/phases" element={<WomanPhasesPage />} />
-              <Route path="/woman/partner" element={<WomanPartnerPage />} />
-              <Route path="/woman/privacy" element={<WomanPrivacyPage />} />
-              <Route path="/woman/profile" element={<WomanProfilePage />} />
+              {/* Woman App (Strictly woman role) */}
+              <Route path="/woman/home" element={<ProtectedRoute allowedRole="woman"><WomanHomePage /></ProtectedRoute>} />
+              <Route path="/woman/calendar" element={<ProtectedRoute allowedRole="woman"><WomanCalendarPage /></ProtectedRoute>} />
+              <Route path="/woman/log" element={<ProtectedRoute allowedRole="woman"><WomanLogPage /></ProtectedRoute>} />
+              <Route path="/woman/insights" element={<ProtectedRoute allowedRole="woman"><WomanInsightsPage /></ProtectedRoute>} />
+              <Route path="/woman/phases" element={<ProtectedRoute allowedRole="woman"><WomanPhasesPage /></ProtectedRoute>} />
+              <Route path="/woman/partner" element={<ProtectedRoute allowedRole="woman"><WomanPartnerPage /></ProtectedRoute>} />
+              <Route path="/woman/privacy" element={<ProtectedRoute allowedRole="woman"><WomanPrivacyPage /></ProtectedRoute>} />
+              <Route path="/woman/profile" element={<ProtectedRoute allowedRole="woman"><WomanProfilePage /></ProtectedRoute>} />
 
-              {/* Partner App */}
-              <Route path="/partner/home" element={<PartnerHomePage />} />
-              <Route path="/partner/calendar" element={<PartnerCalendarPage />} />
-              <Route path="/partner/support" element={<PartnerSupportPage />} />
-              <Route path="/partner/profile" element={<PartnerProfilePage />} />
-              <Route path="/partner/connect" element={<PartnerConnectPage />} />
+              {/* Partner App (Strictly partner role) */}
+              <Route path="/partner/home" element={<ProtectedRoute allowedRole="partner"><PartnerHomePage /></ProtectedRoute>} />
+              <Route path="/partner/calendar" element={<ProtectedRoute allowedRole="partner"><PartnerCalendarPage /></ProtectedRoute>} />
+              <Route path="/partner/support" element={<ProtectedRoute allowedRole="partner"><PartnerSupportPage /></ProtectedRoute>} />
+              <Route path="/partner/profile" element={<ProtectedRoute allowedRole="partner"><PartnerProfilePage /></ProtectedRoute>} />
+              <Route path="/partner/connect" element={<ProtectedRoute allowedRole="partner"><PartnerConnectPage /></ProtectedRoute>} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

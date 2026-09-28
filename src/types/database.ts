@@ -3,16 +3,23 @@ export type FlowLevel = 'none' | 'light' | 'medium' | 'heavy' | 'spotting';
 export type MoodLevel = 'great' | 'good' | 'okay' | 'low' | 'difficult';
 export type EnergyLevel = 'low' | 'medium' | 'high';
 export type CyclePhase = 'menstrual' | 'follicular' | 'ovulation' | 'luteal';
-export type ConnectionStatus = 'pending' | 'active' | 'paused' | 'rejected' | 'disconnected';
+export type PartnerLinkStatus = 'pending' | 'approved' | 'paused';
 
 export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
   role: UserRole;
-  date_of_birth?: string;
+  age?: number;
   avatar_url?: string;
   created_at: string;
+  updated_at: string;
+}
+
+export interface ActiveSession {
+  user_id: string;
+  session_id: string;
+  device?: string;
   updated_at: string;
 }
 
@@ -20,7 +27,7 @@ export interface CycleProfile {
   user_id: string;
   average_cycle_length: number;
   average_period_length: number;
-  last_period_start: string;
+  last_period_start: string | null;
   goals: string[];
   created_at?: string;
   updated_at?: string;
@@ -30,9 +37,9 @@ export interface PeriodLog {
   id: string;
   user_id: string;
   start_date: string; // YYYY-MM-DD
-  end_date?: string;   // YYYY-MM-DD
+  end_date?: string | null; // YYYY-MM-DD
   flow: FlowLevel;
-  notes?: string;
+  notes?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -46,8 +53,8 @@ export interface DailyLog {
   energy?: EnergyLevel;
   sleep_hours?: number;
   water_glasses?: number;
-  weight?: number;
-  notes?: string;
+  weight?: number | null;
+  notes?: string | null;
   symptoms?: string[];
   created_at?: string;
   updated_at?: string;
@@ -61,18 +68,27 @@ export interface SymptomDefinition {
   description?: string;
 }
 
-export interface PartnerConnection {
+export interface PartnerCode {
+  code: string;
+  woman_id: string;
+  expires_at: string;
+  used: boolean;
+  created_at: string;
+}
+
+export interface PartnerLink {
   id: string;
-  woman_user_id: string;
-  partner_user_id?: string;
-  status: ConnectionStatus;
-  connection_code: string;
+  woman_id: string;
+  partner_id?: string | null;
+  status: PartnerLinkStatus;
   is_paused: boolean;
   created_at: string;
-  approved_at?: string;
-  partner_email?: string;
-  partner_name?: string;
+  approved_at?: string | null;
   woman_name?: string;
+  woman_avatar_url?: string;
+  partner_name?: string;
+  partner_avatar_url?: string;
+  partner_email?: string;
 }
 
 export type PermissionKey = 
@@ -92,16 +108,8 @@ export type SharingPermissionsMap = Record<PermissionKey, boolean>;
 
 export interface SharingPermissionRecord {
   id: string;
-  connection_id: string;
+  link_id: string;
   permission_name: PermissionKey;
   enabled: boolean;
   updated_at: string;
-}
-
-export interface PartnerNotificationPref {
-  id: string;
-  connection_id: string;
-  type: 'period_approaching' | 'period_started' | 'mood_update' | 'ovulation_window';
-  enabled: boolean;
-  discreet_wording: boolean;
 }

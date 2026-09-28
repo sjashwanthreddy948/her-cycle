@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Heart, Eye, EyeOff, Lock, Mail, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
+import { Heart, Eye, EyeOff, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 import { Disclaimer } from '../components/common/Disclaimer';
 
 export const LoginPage: React.FC = () => {
@@ -32,18 +32,6 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemoWoman = () => {
-    setEmail('demo.woman@hercycle.app');
-    setPassword('Demo@12345');
-    setError(null);
-  };
-
-  const fillDemoPartner = () => {
-    setEmail('demo.partner@hercycle.app');
-    setPassword('Demo@12345');
-    setError(null);
   };
 
   return (
@@ -88,7 +76,7 @@ export const LoginPage: React.FC = () => {
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="you@hercycle.app"
+                placeholder="you@domain.com"
                 required
                 className="w-full pl-10 pr-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
               />
@@ -106,7 +94,7 @@ export const LoginPage: React.FC = () => {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="••••••••••"
                 required
                 className="w-full pl-10 pr-11 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
               />
@@ -151,29 +139,6 @@ export const LoginPage: React.FC = () => {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Demo Account Quick-Fill Helper */}
-        <div className="mt-5 pt-4 border-t border-rose-50 text-center">
-          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide block mb-2">
-            One-Click Demo Fill
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={fillDemoWoman}
-              className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition"
-            >
-              Fill Woman Demo
-            </button>
-            <button
-              type="button"
-              onClick={fillDemoPartner}
-              className="p-2 rounded-xl bg-pink-50 hover:bg-pink-100 text-pink-700 text-xs font-semibold transition"
-            >
-              Fill Partner Demo
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Footer Register Link */}

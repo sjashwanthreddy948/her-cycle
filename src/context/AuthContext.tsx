@@ -1,90 +1,176 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { UserProfile, UserRole } from '../types/database';
 import { db } from '../lib/db';
-import { DEMO_WOMAN_USER, DEMO_PARTNER_USER } from '../lib/seedData';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface AuthContextType {
   user: UserProfile | null;
   isLoading: boolean;
+  isConfigured: boolean;
+  sessionError: string | null;
   login: (email: string, pass: string) => Promise<UserProfile>;
   register: (params: {
     email: string;
+    password: string;
     fullName: string;
     role: UserRole;
-    dateOfBirth?: string;
+    age?: number;
     cycleLength?: number;
     periodLength?: number;
     lastPeriodStart?: string;
     goals?: string[];
   }) => Promise<UserProfile>;
-  logout: () => void;
-  loginAsDemoWoman: () => Promise<UserProfile>;
-  loginAsDemoPartner: () => Promise<UserProfile>;
+  logout: (reason?: string) => Promise<void>;
   updateCurrentUserProfile: (updates: Partial<UserProfile>) => Promise<UserProfile>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'hercycle_current_user_id';
+const LOCAL_SESSION_KEY = 'hercycle_session_token';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
+  // Helper to establish and record single active session
+  const registerNewSession = useCallback(async (userId: string) => {
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem(LOCAL_SESSION_KEY, sessionId);
+    await db.upsertActiveSession(userId, sessionId);
+    return sessionId;
+  }, []);
+
+  // Check single active session against server
+  const verifyActiveSession = useCallback(async (currentUserId: string) => {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const currentLocalSession = localStorage.getItem(LOCAL_SESSION_KEY);
+      if (!currentLocalSession) return;
+
+      const serverSessionId = await db.getActiveSession(currentUserId);
+      if (serverSessionId && serverSessionId !== currentLocalSession) {
+        // Another device logged in! Sign out immediately
+        console.warn('Single-session violation: account opened on another device.');
+        localStorage.removeItem(LOCAL_SESSION_KEY);
+        await supabase.auth.signOut();
+        setUser(null);
+        setSessionError('You were signed out because your account was opened on another device.');
+      }
+    } catch (err) {
+      // Non-blocking network check
+      console.debug('Session check error:', err);
+    }
+  }, []);
+
+  // Initialize Supabase Auth Session
   useEffect(() => {
-    async function initAuth() {
+    if (!isSupabaseConfigured || !supabase) {
+      setIsLoading(false);
+      return;
+    }
+
+    const client = supabase;
+
+    async function initSession() {
       try {
-        const storedUserId = localStorage.getItem(AUTH_STORAGE_KEY);
-        if (storedUserId) {
-          const profile = await db.getProfile(storedUserId);
+        const { data: { session }, error } = await client.auth.getSession();
+        if (error) throw error;
+
+        if (session?.user) {
+          const profile = await db.getProfile(session.user.id);
           if (profile) {
             setUser(profile);
-            setIsLoading(false);
-            return;
+            // Verify or set session
+            const localSession = localStorage.getItem(LOCAL_SESSION_KEY);
+            if (!localSession) {
+              await registerNewSession(session.user.id);
+            } else {
+              await verifyActiveSession(session.user.id);
+            }
           }
         }
-        // Default to demo woman so user immediately sees the rich dashboard on first open!
-        setUser(DEMO_WOMAN_USER);
-        localStorage.setItem(AUTH_STORAGE_KEY, DEMO_WOMAN_USER.id);
-      } catch (err) {
-        console.error('Auth initialization error:', err);
-        setUser(DEMO_WOMAN_USER);
+      } catch (e) {
+        console.error('Auth initialization error:', e);
       } finally {
         setIsLoading(false);
       }
     }
-    initAuth();
-  }, []);
+
+    initSession();
+
+    // Listen to real-time auth changes
+    const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const profile = await db.getProfile(session.user.id);
+        setUser(profile);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        localStorage.removeItem(LOCAL_SESSION_KEY);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [registerNewSession, verifyActiveSession]);
+
+  // Single-active-session listener: checks every 60s and on tab focus
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      verifyActiveSession(user.id);
+    }, 60000); // every 60s
+
+    const handleFocus = () => {
+      verifyActiveSession(user.id);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [user, verifyActiveSession]);
 
   const login = async (email: string, pass: string): Promise<UserProfile> => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase backend is not configured.');
+    }
+
     setIsLoading(true);
+    setSessionError(null);
     try {
       const cleanEmail = email.trim().toLowerCase();
-      
-      // Match demo accounts
-      if (cleanEmail === 'demo.woman@hercycle.app') {
-        if (pass !== 'Demo@12345') throw new Error('Incorrect password. For demo, use: Demo@12345');
-        const p = await db.getProfile(DEMO_WOMAN_USER.id) || DEMO_WOMAN_USER;
-        setUser(p);
-        localStorage.setItem(AUTH_STORAGE_KEY, p.id);
-        return p;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
+
+      if (error) {
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          throw new Error('Invalid email or password. Please verify your credentials.');
+        }
+        throw new Error(error.message);
       }
 
-      if (cleanEmail === 'demo.partner@hercycle.app') {
-        if (pass !== 'Demo@12345') throw new Error('Incorrect password. For demo, use: Demo@12345');
-        const p = await db.getProfile(DEMO_PARTNER_USER.id) || DEMO_PARTNER_USER;
-        setUser(p);
-        localStorage.setItem(AUTH_STORAGE_KEY, p.id);
-        return p;
+      if (!data.user) {
+        throw new Error('No user returned from login');
       }
 
-      // Check registered accounts
-      let profile = await db.getProfile(cleanEmail);
+      const profile = await db.getProfile(data.user.id);
       if (!profile) {
-        throw new Error('No account found with this email. Please click "Create Account" below.');
+        throw new Error('Profile not found. Please contact support.');
       }
+
+      // Upsert single active session
+      await registerNewSession(data.user.id);
       setUser(profile);
-      localStorage.setItem(AUTH_STORAGE_KEY, profile.id);
       return profile;
     } finally {
       setIsLoading(false);
@@ -93,93 +179,128 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (params: {
     email: string;
+    password: string;
     fullName: string;
     role: UserRole;
-    dateOfBirth?: string;
+    age?: number;
     cycleLength?: number;
     periodLength?: number;
     lastPeriodStart?: string;
     goals?: string[];
   }): Promise<UserProfile> => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase backend is not configured.');
+    }
+
+    if (!params.password || params.password.length < 10) {
+      throw new Error('Password must be at least 10 characters for account security.');
+    }
+
     setIsLoading(true);
+    setSessionError(null);
     try {
-      const newUserId = `usr-${Date.now()}`;
+      const cleanEmail = params.email.trim().toLowerCase();
+
+      // 1. Sign up user via Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: params.password,
+        options: {
+          data: {
+            full_name: params.fullName.trim(),
+            role: params.role,
+          },
+        },
+      });
+
+      if (error) {
+        if (
+          error.message.toLowerCase().includes('already registered') ||
+          error.message.toLowerCase().includes('already exists') ||
+          error.status === 422
+        ) {
+          throw new Error('An account with this email already exists. Please log in.');
+        }
+        throw new Error(error.message);
+      }
+
+      if (!data.user) {
+        throw new Error('Registration failed. Please try again.');
+      }
+
+      const userId = data.user.id;
+
+      // 2. Create profile row in profiles table
       const newProfile: UserProfile = {
-        id: newUserId,
-        email: params.email.trim().toLowerCase(),
+        id: userId,
+        email: cleanEmail,
         full_name: params.fullName.trim(),
         role: params.role,
-        date_of_birth: params.dateOfBirth,
-        avatar_url: params.role === 'woman'
-          ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80'
-          : 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+        age: params.age,
+        avatar_url: undefined,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      const created = await db.createProfile(newProfile);
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert(newProfile);
 
+      if (profileError) {
+        if (profileError.code === '23505' || profileError.message.includes('unique')) {
+          throw new Error('An account with this email already exists. Please log in.');
+        }
+        throw profileError;
+      }
+
+      // 3. If woman, setup cycle profile
       if (params.role === 'woman') {
-        await db.updateCycleProfile(newUserId, {
+        await db.updateCycleProfile(userId, {
           average_cycle_length: params.cycleLength || 28,
           average_period_length: params.periodLength || 5,
-          last_period_start: params.lastPeriodStart || new Date().toISOString().split('T')[0],
+          last_period_start: params.lastPeriodStart || null,
           goals: params.goals || ['cycle_tracking'],
         });
 
-        // Add initial period log if lastPeriodStart provided
         if (params.lastPeriodStart) {
           await db.addPeriodLog({
-            user_id: newUserId,
+            user_id: userId,
             start_date: params.lastPeriodStart,
             flow: 'medium',
-            notes: 'Registered initial cycle start',
+            notes: 'Registered initial period',
           });
         }
       }
 
-      setUser(created);
-      localStorage.setItem(AUTH_STORAGE_KEY, created.id);
-      return created;
+      // 4. Register active session
+      await registerNewSession(userId);
+      setUser(newProfile);
+      return newProfile;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+  const logout = async (reason?: string) => {
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     setUser(null);
-  };
-
-  const loginAsDemoWoman = async () => {
-    setIsLoading(true);
-    try {
-      const p = await db.getProfile(DEMO_WOMAN_USER.id) || DEMO_WOMAN_USER;
-      setUser(p);
-      localStorage.setItem(AUTH_STORAGE_KEY, p.id);
-      return p;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loginAsDemoPartner = async () => {
-    setIsLoading(true);
-    try {
-      const p = await db.getProfile(DEMO_PARTNER_USER.id) || DEMO_PARTNER_USER;
-      setUser(p);
-      localStorage.setItem(AUTH_STORAGE_KEY, p.id);
-      return p;
-    } finally {
-      setIsLoading(false);
-    }
+    if (reason) setSessionError(reason);
   };
 
   const updateCurrentUserProfile = async (updates: Partial<UserProfile>) => {
-    if (!user) throw new Error('No user logged in');
+    if (!user) throw new Error('Not logged in');
     const updated = await db.updateProfile(user.id, updates);
     setUser(updated);
     return updated;
+  };
+
+  const deleteAccount = async () => {
+    if (!user) return;
+    await db.deleteUserAccount();
+    await logout();
   };
 
   return (
@@ -187,12 +308,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isLoading,
+        isConfigured: isSupabaseConfigured,
+        sessionError,
         login,
         register,
         logout,
-        loginAsDemoWoman,
-        loginAsDemoPartner,
         updateCurrentUserProfile,
+        deleteAccount,
       }}
     >
       {children}

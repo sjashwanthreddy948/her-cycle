@@ -1,5 +1,6 @@
 -- ====================================================================
--- HERCYCLE PRODUCTION SUPABASE SCHEMA (HARDENED & DEMO-FREE)
+-- HERCYCLE PRODUCTION DATABASE HARDENING & SECURITY MIGRATION
+-- Migration: 20260929000000_hardening.sql
 -- ====================================================================
 
 -- 1. EXTENSIONS
@@ -456,6 +457,7 @@ SELECT
   cp.average_cycle_length,
   cp.average_period_length,
   cp.last_period_start,
+  -- Aggregated permission map
   COALESCE(
     (
       SELECT jsonb_object_agg(sp.permission_name, sp.enabled)

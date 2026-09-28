@@ -2,20 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../lib/db';
 import { CYCLE_PHASES_DATA } from '../../lib/constants';
-import { CyclePhase, FlowLevel, MoodLevel, EnergyLevel } from '../../types/database';
+import { CyclePhase } from '../../types/database';
 import { 
-  Heart, 
   Calendar, 
-  Droplet, 
-  Clock, 
-  Smile, 
-  Zap, 
   ShieldCheck, 
-  Info, 
   Lock, 
-  Sparkles,
   HeartHandshake,
-  CheckCircle2,
   PauseCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -84,7 +76,7 @@ export const PartnerDashboard: React.FC = () => {
             Sharing Paused
           </h3>
           <p className="text-xs text-gray-600 leading-relaxed">
-            {partnerData.womanName || 'Sarah'} has temporarily paused partner sharing. Her health details will reappear when she resumes sharing.
+            {partnerData.womanName || 'Your partner'} has temporarily paused partner sharing. Her health details will reappear when she resumes sharing.
           </p>
         </div>
       </div>
@@ -109,21 +101,21 @@ export const PartnerDashboard: React.FC = () => {
           </span>
         </div>
         <h2 className="text-2xl font-extrabold font-display text-gray-900 tracking-tight">
-          Hi {user?.full_name?.split(' ')[0] || 'Alex'}
+          Hi {user?.full_name?.split(' ')[0] || 'Partner'}
         </h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          Here is what {womanName} has chosen to share with you.
+          Here is what {womanName || 'she'} has chosen to share with you.
         </p>
       </div>
 
-      {/* SARAH'S CURRENT CYCLE CARD */}
+      {/* PARTNER CURRENT CYCLE CARD */}
       <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100/70 relative overflow-hidden">
         {/* Soft background glow */}
         <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-pink-100/70 to-rose-50/30 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
 
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-            {womanName.toUpperCase()}'S CURRENT CYCLE
+            {(womanName || 'PARTNER').toUpperCase()}'S CURRENT CYCLE
           </span>
           {permissions.cycle_phase && cycleData?.phaseDisplayName && (
             <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${phaseInfo.badgeBg} ${phaseInfo.badgeText}`}>
@@ -150,7 +142,7 @@ export const PartnerDashboard: React.FC = () => {
         ) : (
           <div className="p-3 bg-gray-50 rounded-2xl text-xs text-gray-400 italic mb-4 flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5" />
-            <span>Cycle day not shared</span>
+            <span>She hasn't shared this</span>
           </div>
         )}
 
@@ -169,7 +161,7 @@ export const PartnerDashboard: React.FC = () => {
                 </span>
               </div>
             ) : (
-              <span className="text-gray-400 italic text-[11px]">Not shared</span>
+              <span className="text-gray-400 italic text-[11px]">She hasn't shared this</span>
             )}
           </div>
 
@@ -186,7 +178,7 @@ export const PartnerDashboard: React.FC = () => {
                 </span>
               </div>
             ) : (
-              <span className="text-gray-400 italic text-[11px]">Not shared</span>
+              <span className="text-gray-400 italic text-[11px]">She hasn't shared this</span>
             )}
           </div>
         </div>
@@ -255,7 +247,7 @@ export const PartnerDashboard: React.FC = () => {
             ) : (
               <div className="text-[11px] text-gray-400 italic flex items-center gap-1">
                 <Lock className="w-3 h-3" />
-                <span>{permissions.mood ? 'Not logged yet' : `${womanName} hasn't shared this`}</span>
+                <span>{permissions.mood ? 'Not logged yet' : "She hasn't shared this"}</span>
               </div>
             )}
           </div>
@@ -277,7 +269,7 @@ export const PartnerDashboard: React.FC = () => {
             ) : (
               <div className="text-[11px] text-gray-400 italic flex items-center gap-1">
                 <Lock className="w-3 h-3" />
-                <span>{permissions.energy ? 'Not logged yet' : `${womanName} hasn't shared this`}</span>
+                <span>{permissions.energy ? 'Not logged yet' : "She hasn't shared this"}</span>
               </div>
             )}
           </div>

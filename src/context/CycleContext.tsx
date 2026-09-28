@@ -3,15 +3,14 @@ import {
   CycleProfile, 
   PeriodLog, 
   DailyLog, 
-  PartnerConnection, 
+  PartnerLink,
+  PartnerCode,
   SharingPermissionsMap, 
-  PermissionKey,
-  FlowLevel
+  PermissionKey
 } from '../types/database';
 import { CycleCalculationResult, CycleStats } from '../types/cycle';
 import { calculateCycleState, computeCycleStatistics, formatDateYMD } from '../lib/cycleCalculator';
 import { db } from '../lib/db';
-import { DEMO_CYCLE_PROFILE, DEMO_SHARING_PERMISSIONS } from '../lib/seedData';
 import { SHARING_PRESETS } from '../lib/constants';
 import { useAuth } from './AuthContext';
 
@@ -21,13 +20,37 @@ export interface ToastItem {
   type: 'success' | 'info' | 'error' | 'warning';
 }
 
+const DEFAULT_CYCLE_PROFILE: CycleProfile = {
+  user_id: '',
+  average_cycle_length: 28,
+  average_period_length: 5,
+  last_period_start: null,
+  goals: [],
+};
+
+const DEFAULT_PERMISSIONS: SharingPermissionsMap = {
+  cycle_phase: true,
+  cycle_day: true,
+  period_status: true,
+  estimated_next_period: true,
+  mood: true,
+  energy: true,
+  symptoms: false,
+  flow: false,
+  sleep: false,
+  notes: false,
+  weight: false,
+};
+
 interface CycleContextType {
   cycleProfile: CycleProfile;
   periodLogs: PeriodLog[];
   dailyLogs: DailyLog[];
   cycleState: CycleCalculationResult;
   stats: CycleStats;
-  partnerConnection: PartnerConnection | null;
+  partnerLink: PartnerLink | null;
+  partnerConnection: PartnerLink | null;
+  partnerCode: PartnerCode | null;
   sharingPermissions: SharingPermissionsMap;
   todayLog: DailyLog | null;
   selectedDate: string;
@@ -42,8 +65,9 @@ interface CycleContextType {
   updatePeriodLog: (id: string, updates: Partial<PeriodLog>) => Promise<void>;
   deletePeriodLog: (id: string) => Promise<void>;
   generatePartnerCode: () => Promise<string>;
-  approvePartner: (connId: string) => Promise<void>;
-  declinePartner: (connId: string) => Promise<void>;
+  redeemPartnerCode: (code: string) => Promise<{ success: boolean; link_id: string; status: string }>;
+  approvePartner: (linkId: string) => Promise<void>;
+  declinePartner: (linkId: string) => Promise<void>;
   togglePauseSharing: (pause: boolean) => Promise<void>;
   disconnectPartner: () => Promise<void>;
   updateSharingPermission: (key: PermissionKey, enabled: boolean) => Promise<void>;
@@ -56,12 +80,13 @@ const CycleContext = createContext<CycleContextType | undefined>(undefined);
 
 export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState<string>(formatDateYMD(new Date()));
-  const [cycleProfile, setCycleProfile] = useState<CycleProfile>(DEMO_CYCLE_PROFILE);
+  const [selectedDate, setSelectedDate] = useState<string>(() => formatDateYMD(new Date()));
+  const [cycleProfile, setCycleProfile] = useState<CycleProfile>(DEFAULT_CYCLE_PROFILE);
   const [periodLogs, setPeriodLogs] = useState<PeriodLog[]>([]);
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>([]);
-  const [partnerConnection, setPartnerConnection] = useState<PartnerConnection | null>(null);
-  const [sharingPermissions, setSharingPermissions] = useState<SharingPermissionsMap>({ ...DEMO_SHARING_PERMISSIONS });
+  const [partnerLink, setPartnerLink] = useState<PartnerLink | null>(null);
+  const [partnerCode, setPartnerCode] = useState<PartnerCode | null>(null);
+  const [sharingPermissions, setSharingPermissions] = useState<SharingPermissionsMap>(DEFAULT_PERMISSIONS);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -78,27 +103,41 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setCycleProfile(DEFAULT_CYCLE_PROFILE);
+      setPeriodLogs([]);
+      setDailyLogs([]);
+      setPartnerLink(null);
+      setPartnerCode(null);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       if (user.role === 'woman') {
-        const [profile, periods, dailies, conn] = await Promise.all([
+        const [profile, periods, dailies, link, code] = await Promise.all([
           db.getCycleProfile(user.id),
           db.getPeriodLogs(user.id),
           db.getDailyLogs(user.id),
-          db.getPartnerConnection(user.id, 'woman'),
+          db.getPartnerLink(user.id, 'woman'),
+          db.getActivePartnerCode(user.id),
         ]);
 
-        setCycleProfile(profile);
+        setCycleProfile(profile || { ...DEFAULT_CYCLE_PROFILE, user_id: user.id });
         setPeriodLogs(periods);
         setDailyLogs(dailies);
-        setPartnerConnection(conn);
+        setPartnerLink(link);
+        setPartnerCode(code);
 
-        if (conn) {
-          const perms = await db.getSharingPermissions(conn.id);
+        if (link) {
+          const perms = await db.getSharingPermissions(link.id);
           setSharingPermissions(perms);
         }
+      } else if (user.role === 'partner') {
+        const link = await db.getPartnerLink(user.id, 'partner');
+        setPartnerLink(link);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error refreshing cycle data:', e);
     } finally {
       setIsLoading(false);
@@ -106,13 +145,10 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      setIsLoading(true);
-      refresh();
-    }
-  }, [user, refresh]);
+    refresh();
+  }, [refresh]);
 
-  // Calculations
+  // Derived Calculations
   const cycleState = calculateCycleState(cycleProfile, periodLogs, selectedDate);
   const stats = computeCycleStatistics(cycleProfile, periodLogs, dailyLogs);
 
@@ -185,15 +221,26 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const generatePartnerCode = async (): Promise<string> => {
     if (!user) throw new Error('Not authenticated');
-    const code = await db.generateConnectionCode(user.id);
-    await refresh();
-    addToast(`New connection code generated: ${code}`, 'info');
-    return code;
+    try {
+      const code = await db.generatePartnerCode();
+      await refresh();
+      addToast(`Generated new partner code: ${code}`, 'info');
+      return code;
+    } catch (e: any) {
+      addToast(e?.message || 'Failed to generate partner code', 'error');
+      throw e;
+    }
   };
 
-  const approvePartner = async (connId: string) => {
+  const redeemPartnerCode = async (code: string) => {
+    const res = await db.redeemPartnerCode(code);
+    await refresh();
+    return res;
+  };
+
+  const approvePartner = async (linkId: string) => {
     try {
-      await db.approveConnection(connId);
+      await db.approvePartnerLink(linkId);
       await refresh();
       addToast('Partner connection approved! 🎉', 'success');
     } catch (e: any) {
@@ -201,20 +248,20 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const declinePartner = async (connId: string) => {
+  const declinePartner = async (linkId: string) => {
     try {
-      await db.declineConnection(connId);
+      await db.declinePartnerLink(linkId);
       await refresh();
-      addToast('Connection request declined', 'info');
+      addToast('Connection request removed', 'info');
     } catch (e: any) {
       addToast(e?.message || 'Failed to decline partner', 'error');
     }
   };
 
   const togglePauseSharing = async (pause: boolean) => {
-    if (!partnerConnection) return;
+    if (!partnerLink) return;
     try {
-      await db.togglePauseSharing(partnerConnection.id, pause);
+      await db.togglePausePartner(partnerLink.id, pause);
       await refresh();
       addToast(pause ? 'Partner sharing paused ⏸️' : 'Partner sharing resumed ▶️', 'info');
     } catch (e: any) {
@@ -223,9 +270,9 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const disconnectPartner = async () => {
-    if (!partnerConnection) return;
+    if (!partnerLink) return;
     try {
-      await db.removePartner(partnerConnection.id);
+      await db.disconnectPartner(partnerLink.id);
       await refresh();
       addToast('Partner disconnected', 'info');
     } catch (e: any) {
@@ -234,10 +281,10 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateSharingPermission = async (key: PermissionKey, enabled: boolean) => {
-    if (!partnerConnection) return;
+    if (!partnerLink) return;
     try {
-      const updated = await db.updateSharingPermission(partnerConnection.id, key, enabled);
-      setSharingPermissions(updated);
+      await db.updateSharingPermission(partnerLink.id, key, enabled);
+      setSharingPermissions(prev => ({ ...prev, [key]: enabled }));
       addToast('Sharing settings updated', 'success');
     } catch (e: any) {
       addToast(e?.message || 'Failed to update setting', 'error');
@@ -245,12 +292,12 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const applyPreset = async (presetId: 'basic' | 'standard' | 'custom') => {
-    if (!partnerConnection) return;
+    if (!partnerLink) return;
     const preset = SHARING_PRESETS.find(p => p.id === presetId);
     if (!preset) return;
     try {
-      const updated = await db.applyPreset(partnerConnection.id, preset.permissions);
-      setSharingPermissions(updated);
+      await db.applyPreset(partnerLink.id, preset.permissions);
+      setSharingPermissions(preset.permissions);
       addToast(`Applied ${preset.name} preset!`, 'success');
     } catch (e: any) {
       addToast(e?.message || 'Failed to apply preset', 'error');
@@ -277,7 +324,9 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         dailyLogs,
         cycleState,
         stats,
-        partnerConnection,
+        partnerLink,
+        partnerConnection: partnerLink,
+        partnerCode,
         sharingPermissions,
         todayLog,
         selectedDate,
@@ -292,6 +341,7 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updatePeriodLog,
         deletePeriodLog,
         generatePartnerCode,
+        redeemPartnerCode,
         approvePartner,
         declinePartner,
         togglePauseSharing,

@@ -1,26 +1,15 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Heart, RefreshCw, UserCheck, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Heart, User } from 'lucide-react';
 
 export const Header: React.FC = () => {
-  const { user, loginAsDemoWoman, loginAsDemoPartner } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   if (!user) return null;
 
   const isPartner = user.role === 'partner';
-
-  const handleSwitchRole = async () => {
-    if (isPartner) {
-      await loginAsDemoWoman();
-      navigate('/woman/home');
-    } else {
-      await loginAsDemoPartner();
-      navigate('/partner/home');
-    }
-  };
 
   return (
     <header className="sticky top-0 z-40 bg-[#FFF5F7]/90 backdrop-blur-md border-b border-rose-100/60 px-4 py-3">
@@ -43,30 +32,27 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* Action controls & demo switcher */}
-        <div className="flex items-center gap-2">
-          {/* Quick Demo Switcher Pill */}
-          <button
-            onClick={handleSwitchRole}
-            title={`Switch to ${isPartner ? 'Sarah (Woman)' : 'Alex (Partner)'}`}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-white border border-rose-200/80 text-rose-600 shadow-sm hover:bg-rose-50 transition active:scale-95"
-          >
-            <RefreshCw className="w-3 h-3 text-rose-500" />
-            <span className="hidden sm:inline">Switch to</span>
-            <span className="font-semibold">{isPartner ? 'Sarah' : 'Alex'}</span>
-          </button>
-
-          {/* User Profile Avatar */}
+        {/* User Profile Avatar */}
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-gray-700 hidden sm:inline">
+            {user.full_name}
+          </span>
           <button
             onClick={() => navigate(isPartner ? '/partner/profile' : '/woman/profile')}
             className="relative p-0.5 rounded-full ring-2 ring-rose-200 hover:ring-rose-400 transition"
             aria-label="Open profile"
           >
-            <img
-              src={user.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-              alt={user.full_name}
-              className="w-7 h-7 rounded-full object-cover"
-            />
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.full_name}
+                className="w-7 h-7 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-xs font-semibold">
+                {user.full_name ? user.full_name.charAt(0).toUpperCase() : <User className="w-3.5 h-3.5" />}
+              </div>
+            )}
             <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white"></span>
           </button>
         </div>

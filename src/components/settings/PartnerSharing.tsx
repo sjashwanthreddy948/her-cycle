@@ -20,7 +20,8 @@ import {
 
 export const PartnerSharing: React.FC = () => {
   const {
-    partnerConnection,
+    partnerLink,
+    partnerCode,
     sharingPermissions,
     generatePartnerCode,
     approvePartner,
@@ -36,15 +37,15 @@ export const PartnerSharing: React.FC = () => {
   const [activePreset, setActivePreset] = useState<'basic' | 'standard' | 'custom'>('standard');
   const [showQr, setShowQr] = useState(false);
 
-  const isConnected = partnerConnection && partnerConnection.status === 'active';
-  const isPending = partnerConnection && partnerConnection.status === 'pending' && partnerConnection.partner_user_id;
-  const isPaused = partnerConnection?.is_paused;
+  const isConnected = partnerLink && (partnerLink.status === 'approved');
+  const isPending = partnerLink && partnerLink.status === 'pending';
+  const isPaused = partnerLink?.is_paused || partnerLink?.status === 'paused';
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopied(true);
     addToast('Connection code copied to clipboard!', 'info');
-    setTimeout(() => setCopied(false), 2500);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handlePresetSelect = (id: 'basic' | 'standard' | 'custom') => {
@@ -87,20 +88,20 @@ export const PartnerSharing: React.FC = () => {
                 Connection Request Received
               </h4>
               <p className="text-xs text-gray-600 mt-0.5">
-                <strong className="text-rose-600">{partnerConnection.partner_name || 'Alex'}</strong> ({partnerConnection.partner_email || 'partner'}) wants to connect with your HerCycle account.
+                <strong className="text-rose-600">{partnerLink?.partner_name || 'Your partner'}</strong> ({partnerLink?.partner_email || 'partner'}) wants to connect with your HerCycle account.
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-rose-200/60">
             <button
-              onClick={() => declinePartner(partnerConnection.id)}
+              onClick={() => partnerLink && declinePartner(partnerLink.id)}
               className="py-2.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition"
             >
               Decline
             </button>
             <button
-              onClick={() => approvePartner(partnerConnection.id)}
+              onClick={() => partnerLink && approvePartner(partnerLink.id)}
               className="py-2.5 rounded-full bg-rose-500 text-white text-xs font-bold shadow-sm shadow-rose-200 hover:bg-rose-600 transition"
             >
               Approve Connection
@@ -110,16 +111,16 @@ export const PartnerSharing: React.FC = () => {
       )}
 
       {/* ACTIVE CONNECTION CARD */}
-      {isConnected ? (
+      {isConnected && partnerLink ? (
         <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100">
           <div className="flex items-center justify-between pb-3 border-b border-rose-50 mb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-pink-400 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                {(partnerConnection.partner_name || 'Alex')[0]}
+                {(partnerLink.partner_name || 'P')[0]}
               </div>
               <div>
                 <h4 className="text-sm font-bold text-gray-900">
-                  Connected with {partnerConnection.partner_name || 'Alex'}
+                  Connected with {partnerLink.partner_name || 'Partner'}
                 </h4>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -178,61 +179,75 @@ export const PartnerSharing: React.FC = () => {
             </p>
 
             {/* Connection Code Display */}
-            <div className="my-4 p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between max-w-xs mx-auto">
-              <span className="font-mono text-2xl font-extrabold tracking-widest text-rose-600">
-                {partnerConnection?.connection_code || 'HER-789'}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleCopyCode(partnerConnection?.connection_code || 'HER-789')}
-                className="p-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 active:scale-95 transition"
-                title="Copy code"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={generatePartnerCode}
-                className="text-xs text-rose-600 font-semibold hover:underline"
-              >
-                Regenerate New Code
-              </button>
-              <span className="text-gray-300">•</span>
-              <button
-                type="button"
-                onClick={() => setShowQr(prev => !prev)}
-                className="text-xs text-gray-600 font-semibold hover:text-gray-900 flex items-center gap-1"
-              >
-                <QrCode className="w-3.5 h-3.5 text-rose-500" />
-                <span>{showQr ? 'Hide QR' : 'Show QR Code'}</span>
-              </button>
-            </div>
-
-            {/* QR Code graphic */}
-            {showQr && (
-              <div className="mt-4 p-4 bg-white rounded-2xl border border-rose-100 max-w-[200px] mx-auto shadow-sm animate-fade-in flex flex-col items-center">
-                <div className="w-36 h-36 bg-gray-900 p-2 rounded-xl flex items-center justify-center text-white">
-                  {/* Clean SVG QR mockup */}
-                  <svg viewBox="0 0 100 100" className="w-full h-full fill-white">
-                    <rect x="10" y="10" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
-                    <rect x="18" y="18" width="9" height="9" fill="white" />
-                    <rect x="65" y="10" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
-                    <rect x="73" y="18" width="9" height="9" fill="white" />
-                    <rect x="10" y="65" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
-                    <rect x="18" y="73" width="9" height="9" fill="white" />
-                    <rect x="45" y="15" width="8" height="20" fill="white" />
-                    <rect x="45" y="45" width="12" height="12" fill="#F43F5E" />
-                    <rect x="65" y="45" width="20" height="8" fill="white" />
-                    <rect x="45" y="70" width="8" height="15" fill="white" />
-                    <rect x="65" y="65" width="22" height="22" fill="white" />
-                  </svg>
+            {partnerCode?.code ? (
+              <>
+                <div className="my-4 p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between max-w-xs mx-auto">
+                  <span className="font-mono text-xl font-extrabold tracking-widest text-rose-600">
+                    {partnerCode.code}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyCode(partnerCode.code)}
+                    className="p-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 active:scale-95 transition"
+                    title="Copy code"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                  </button>
                 </div>
-                <span className="text-[10px] text-gray-400 mt-2 font-mono">
-                  {partnerConnection?.connection_code || 'HER-789'}
-                </span>
+                <p className="text-[11px] text-gray-400 mb-3">Expires in 24h · Single use (expires immediately once entered)</p>
+
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={generatePartnerCode}
+                    className="text-xs text-rose-600 font-semibold hover:underline"
+                  >
+                    Regenerate Code
+                  </button>
+                  <span className="text-gray-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowQr(prev => !prev)}
+                    className="text-xs text-gray-600 font-semibold hover:text-gray-900 flex items-center gap-1"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-rose-500" />
+                    <span>{showQr ? 'Hide QR' : 'Show QR Code'}</span>
+                  </button>
+                </div>
+
+                {/* QR Code graphic */}
+                {showQr && (
+                  <div className="mt-4 p-4 bg-white rounded-2xl border border-rose-100 max-w-[200px] mx-auto shadow-sm animate-fade-in flex flex-col items-center">
+                    <div className="w-36 h-36 bg-gray-900 p-2 rounded-xl flex items-center justify-center text-white">
+                      <svg viewBox="0 0 100 100" className="w-full h-full fill-white">
+                        <rect x="10" y="10" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
+                        <rect x="18" y="18" width="9" height="9" fill="white" />
+                        <rect x="65" y="10" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
+                        <rect x="73" y="18" width="9" height="9" fill="white" />
+                        <rect x="10" y="65" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
+                        <rect x="18" y="73" width="9" height="9" fill="white" />
+                        <rect x="45" y="15" width="8" height="20" fill="white" />
+                        <rect x="45" y="45" width="12" height="12" fill="#F43F5E" />
+                        <rect x="65" y="45" width="20" height="8" fill="white" />
+                        <rect x="45" y="70" width="8" height="15" fill="white" />
+                        <rect x="65" y="65" width="22" height="22" fill="white" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] text-gray-400 mt-2 font-mono">
+                      {partnerCode.code}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="my-4">
+                <button
+                  type="button"
+                  onClick={generatePartnerCode}
+                  className="px-6 py-3 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-sm shadow-rose-200 transition"
+                >
+                  Generate Invite Code
+                </button>
               </div>
             )}
           </div>

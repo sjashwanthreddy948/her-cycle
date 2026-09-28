@@ -29,7 +29,7 @@ export const PartnerProfile: React.FC = () => {
     load();
   }, [user]);
 
-  const womanName = partnerData?.womanName || 'Sarah';
+  const womanName = partnerData?.womanName || 'Your Partner';
   const isConnected = partnerData?.isConnected;
   const isPaused = partnerData?.isPaused;
   const permissions = partnerData?.permissions || {};
@@ -40,11 +40,17 @@ export const PartnerProfile: React.FC = () => {
       {/* Profile Card */}
       <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100 flex items-center gap-4">
         <div className="relative">
-          <img
-            src={user?.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'}
-            alt={user?.full_name}
-            className="w-16 h-16 rounded-full object-cover ring-4 ring-rose-100"
-          />
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={user.full_name}
+              className="w-16 h-16 rounded-full object-cover ring-4 ring-rose-100"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-xl font-bold ring-4 ring-rose-100">
+              {user?.full_name ? user.full_name.charAt(0).toUpperCase() : 'P'}
+            </div>
+          )}
           <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
         </div>
         <div>
@@ -52,9 +58,9 @@ export const PartnerProfile: React.FC = () => {
             Partner Account
           </span>
           <h2 className="text-lg font-bold font-display text-gray-900 leading-tight">
-            {user?.full_name || 'Alex Miller'}
+            {user?.full_name || 'Partner Account'}
           </h2>
-          <p className="text-xs text-gray-500">{user?.email || 'demo.partner@hercycle.app'}</p>
+          <p className="text-xs text-gray-500">{user?.email || ''}</p>
         </div>
       </div>
 
@@ -141,7 +147,7 @@ export const PartnerProfile: React.FC = () => {
         </button>
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="w-full p-3 rounded-2xl bg-gray-50 hover:bg-rose-50 border border-gray-100 flex items-center justify-between text-xs font-semibold text-gray-800 transition"
         >
           <div className="flex items-center gap-2 text-gray-600">
