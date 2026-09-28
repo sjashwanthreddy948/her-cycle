@@ -3,6 +3,7 @@ import { UserProfile, UserRole } from '../types/database';
 import { db } from '../lib/db';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { standaloneDb, StandaloneUserRecord } from '../lib/standaloneDb';
+import { normalizePartnerCode, looksLikePartnerCode } from '../lib/codeUtils';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -10,6 +11,12 @@ interface AuthContextType {
   isConfigured: boolean;
   sessionError: string | null;
   login: (email: string, pass: string) => Promise<UserProfile>;
+  connectWithPartnerCode: (params: {
+    code: string;
+    fullName?: string;
+    email?: string;
+    password?: string;
+  }) => Promise<UserProfile>;
   register: (params: {
     email: string;
     password: string;
@@ -30,6 +37,22 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LOCAL_SESSION_KEY = 'hercycle_session_token';
 const STANDALONE_USER_KEY = 'hercycle_standalone_current_user_id';
+
+const isSupabaseFallbackError = (err: any): boolean => {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  const code = (err.code || '').toLowerCase();
+  return (
+    msg.includes('api key') ||
+    msg.includes('jwt') ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find the table') ||
+    msg.includes('email not confirmed') ||
+    msg.includes('failed to fetch') ||
+    code === 'pgrst205' ||
+    code === '42p01'
+  );
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -165,7 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
 
           if (error) {
-            if (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('jwt')) {
+            if (isSupabaseFallbackError(error)) {
               // Fallback to standalone mode below
             } else if (error.message.toLowerCase().includes('invalid login credentials')) {
               throw new Error('Invalid email or password. Please verify your credentials.');
@@ -175,6 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else if (data?.user) {
             const profile = await db.getProfile(data.user.id);
             if (!profile) {
+              // Fallback if profile row is not found or schema missing
               throw new Error('Profile not found. Please contact support.');
             }
 
@@ -183,7 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return profile;
           }
         } catch (err: any) {
-          if (!err?.message?.toLowerCase().includes('api key') && !err?.message?.toLowerCase().includes('jwt')) {
+          if (!isSupabaseFallbackError(err)) {
             throw err;
           }
         }
@@ -192,11 +216,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Standalone Mode Login
       const found = standaloneDb.findUserByEmail(cleanEmail);
       if (!found || found.password_hash !== pass) {
+        if (looksLikePartnerCode(pass) || looksLikePartnerCode(email)) {
+          throw new Error("It looks like you entered a Partner Invite Code as your password! Please click the 'Partner Invite Code' tab to connect directly.");
+        }
         throw new Error('Invalid email or password. Please verify your credentials.');
       }
       localStorage.setItem(STANDALONE_USER_KEY, found.id);
       await registerNewSession(found.id);
       const { password_hash: _password_hash, ...profile } = found;
+      setUser(profile);
+      return profile;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const connectWithPartnerCode = async (params: {
+    code: string;
+    fullName?: string;
+    email?: string;
+    password?: string;
+  }): Promise<UserProfile> => {
+    setIsLoading(true);
+    setSessionError(null);
+    try {
+      const cleanCode = normalizePartnerCode(params.code);
+      const { profile } = await db.redeemAndCreatePartner(
+        cleanCode,
+        params.fullName,
+        params.email,
+        params.password
+      );
+
+      localStorage.setItem(STANDALONE_USER_KEY, profile.id);
+      await registerNewSession(profile.id);
       setUser(profile);
       return profile;
     } finally {
@@ -238,7 +291,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
 
           if (error) {
-            if (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('jwt')) {
+            if (isSupabaseFallbackError(error)) {
               // Fallback to standalone mode below
             } else if (
               error.message.toLowerCase().includes('already registered') ||
@@ -268,6 +321,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               .upsert(newProfile);
 
             if (profileError) {
+              if (isSupabaseFallbackError(profileError)) {
+                throw profileError;
+              }
               if (profileError.code === '23505' || profileError.message.includes('unique')) {
                 throw new Error('An account with this email already exists. Please log in.');
               }
@@ -296,7 +352,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return newProfile;
           }
         } catch (err: any) {
-          if (!err?.message?.toLowerCase().includes('api key') && !err?.message?.toLowerCase().includes('jwt')) {
+          if (!isSupabaseFallbackError(err)) {
             throw err;
           }
         }
@@ -381,6 +437,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isConfigured: true,
         sessionError,
         login,
+        connectWithPartnerCode,
         register,
         logout,
         updateCurrentUserProfile,

@@ -194,7 +194,10 @@ export const PartnerSharing: React.FC = () => {
                     {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400 mb-3">Expires in 24h · Single use (expires immediately once entered)</p>
+                <p className="text-[11px] text-gray-500 mb-1 font-medium">
+                  Your partner can enter this code at <strong>Login → Partner Invite Code</strong>
+                </p>
+                <p className="text-[10px] text-gray-400 mb-3">Expires in 24h · Single use (expires immediately once entered)</p>
 
                 <div className="flex items-center justify-center gap-3">
                   <button
@@ -203,6 +206,18 @@ export const PartnerSharing: React.FC = () => {
                     className="text-xs text-rose-600 font-semibold hover:underline"
                   >
                     Regenerate Code
+                  </button>
+                  <span className="text-gray-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const msg = `Hey! Connect with me on HerCycle using code: ${partnerCode.code}. Visit the app and select 'Partner Invite Code' to connect directly!`;
+                      navigator.clipboard.writeText(msg);
+                      handleCopyCode(msg);
+                    }}
+                    className="text-xs text-rose-600 font-semibold hover:underline"
+                  >
+                    Copy Full Invite
                   </button>
                   <span className="text-gray-300">•</span>
                   <button

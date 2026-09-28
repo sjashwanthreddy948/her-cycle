@@ -4,6 +4,8 @@ import { useCycle } from '../../context/CycleContext';
 import { useNavigate } from 'react-router-dom';
 import { HeartHandshake, ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
 
+import { normalizePartnerCode } from '../../lib/codeUtils';
+
 export const PartnerConnect: React.FC = () => {
   const { user } = useAuth();
   const { redeemPartnerCode, addToast } = useCycle();
@@ -18,16 +20,17 @@ export const PartnerConnect: React.FC = () => {
     e.preventDefault();
     if (!user) return;
     setErrorMessage(null);
-    if (!code.trim()) {
+    const clean = normalizePartnerCode(code);
+    if (!clean) {
       addToast('Please enter your partner’s connection code', 'warning');
       return;
     }
 
     setLoading(true);
     try {
-      await redeemPartnerCode(code.trim());
+      await redeemPartnerCode(clean);
       setSuccess(true);
-      addToast('Connection code redeemed! Waiting for your partner to confirm.', 'success');
+      addToast('Connected successfully! 🎉', 'success');
     } catch (err: any) {
       const msg = err?.message || 'This connection code has expired or has already been used by someone else.';
       setErrorMessage(msg);
@@ -55,16 +58,16 @@ export const PartnerConnect: React.FC = () => {
           <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 text-center space-y-3">
             <CheckCircle2 className="w-10 h-10 text-rose-500 mx-auto" />
             <h4 className="text-sm font-bold text-gray-900">
-              Request Sent Successfully!
+              Connected Successfully!
             </h4>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Your partner has received your connection request. Once she clicks <strong>Approve</strong> in her app, your read-only partner dashboard will activate.
+              Your partner account is now linked to her cycle updates. You can view her shared phase, daily status, and empathy tips.
             </p>
             <button
               onClick={() => navigate('/partner/home')}
-              className="w-full py-2.5 rounded-full bg-rose-500 text-white font-bold text-xs shadow-soft hover:bg-rose-600 transition"
+              className="w-full py-3 rounded-full bg-rose-500 text-white font-bold text-xs shadow-soft hover:bg-rose-600 transition"
             >
-              Go to Partner Home
+              Open Partner Sanctuary →
             </button>
           </div>
         ) : (

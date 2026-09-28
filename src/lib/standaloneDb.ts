@@ -9,6 +9,7 @@ import {
   PermissionKey
 } from '../types/database';
 import { calculateCycleState } from './cycleCalculator';
+import { normalizePartnerCode } from './codeUtils';
 
 // Local storage keys
 const USERS_KEY = 'hercycle_standalone_users';
@@ -248,56 +249,53 @@ export const standaloneDb = {
   },
 
   async redeemPartnerCode(partnerId: string, inputCode: string): Promise<{ success: boolean; link_id: string; status: string }> {
-    const clean = inputCode.trim().toUpperCase();
+    const clean = normalizePartnerCode(inputCode);
     const codes = load<PartnerCode[]>(PARTNER_CODES_KEY, []);
-    const record = codes.find(c => c.code === clean);
+    const record = codes.find(c => normalizePartnerCode(c.code) === clean);
 
     // Rate limiting
     const attempts = load<{ partner_id: string; time: number }[]>(CODE_ATTEMPTS_KEY, []);
     const now = Date.now();
     const recent = attempts.filter(a => a.partner_id === partnerId && (now - a.time) < 15 * 60 * 1000);
-    if (recent.length >= 5) {
+    if (recent.length >= 10) {
       throw new Error('Too many failed code attempts. Please wait 15 minutes before trying again.');
     }
 
     if (!record) {
       attempts.push({ partner_id: partnerId, time: now });
       save(CODE_ATTEMPTS_KEY, attempts);
-      throw new Error('Invalid connection code. Please check the code and try again.');
+      throw new Error('Invalid connection code. Please verify the 6-character code from your partner’s app (e.g. HER-ABC234).');
     }
 
     // Strict single-use & expiration check
     if (record.used || new Date(record.expires_at).getTime() <= now) {
       attempts.push({ partner_id: partnerId, time: now });
       save(CODE_ATTEMPTS_KEY, attempts);
-      throw new Error('This connection code has expired or has already been used. Each code is single-use and cannot be used again by another person.');
+      throw new Error('This connection code has expired or has already been used. Please ask your partner to tap "Regenerate Code".');
     }
 
     if (record.woman_id === partnerId) {
-      throw new Error('You cannot link to your own account.');
+      throw new Error('You cannot link to your own account. Please share this code with your partner.');
     }
 
-    const links = load<PartnerLink[]>(PARTNER_LINKS_KEY, []);
-    if (links.some(l => l.partner_id === partnerId)) {
-      throw new Error('You are already linked to an account.');
-    }
-    if (links.some(l => l.woman_id === record.woman_id)) {
-      throw new Error('This account is already linked with a partner.');
-    }
-
-    // Atomically mark used AND immediately expire upon entry so it cannot be used again by another person
+    // Atomically mark used AND immediately expire upon entry
     record.used = true;
     record.expires_at = new Date().toISOString();
     save(PARTNER_CODES_KEY, codes);
+
+    // Remove any stale or previous links for this partner or woman
+    let links = load<PartnerLink[]>(PARTNER_LINKS_KEY, []);
+    links = links.filter(l => !(l.partner_id === partnerId || l.woman_id === record.woman_id));
 
     const linkId = `link_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newLink: PartnerLink = {
       id: linkId,
       woman_id: record.woman_id,
       partner_id: partnerId,
-      status: 'pending',
+      status: 'approved',
       is_paused: false,
       created_at: new Date().toISOString(),
+      approved_at: new Date().toISOString(),
     };
     links.push(newLink);
     save(PARTNER_LINKS_KEY, links);
@@ -322,8 +320,101 @@ export const standaloneDb = {
     return {
       success: true,
       link_id: linkId,
-      status: 'pending',
+      status: 'approved',
     };
+  },
+
+  async redeemAndCreatePartner(
+    inputCode: string,
+    fullName?: string,
+    email?: string,
+    password?: string
+  ): Promise<{ profile: UserProfile; linkId: string }> {
+    const clean = normalizePartnerCode(inputCode);
+    const codes = load<PartnerCode[]>(PARTNER_CODES_KEY, []);
+    const record = codes.find(c => normalizePartnerCode(c.code) === clean);
+
+    if (!record) {
+      throw new Error('Invalid connection code. Please check that the code matches what your partner generated (e.g. HER-ABC234).');
+    }
+
+    const now = Date.now();
+    if (record.used || new Date(record.expires_at).getTime() <= now) {
+      throw new Error('This connection code has expired or has already been used. Please ask your partner to tap "Regenerate Code".');
+    }
+
+    // Check or create partner account
+    const users = this.getUsers();
+    const partnerEmail = (email && email.trim()) 
+      ? email.trim().toLowerCase() 
+      : `partner_${Date.now().toString(36)}@hercycle.app`;
+
+    let partnerUser = users.find(u => u.email.toLowerCase() === partnerEmail);
+
+    if (!partnerUser) {
+      partnerUser = {
+        id: `usr_partner_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        email: partnerEmail,
+        full_name: fullName?.trim() || 'Partner',
+        role: 'partner',
+        password_hash: password || 'PartnerPass123!',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      users.push(partnerUser);
+      save(USERS_KEY, users);
+    } else {
+      if (fullName && fullName.trim()) {
+        partnerUser.full_name = fullName.trim();
+        save(USERS_KEY, users);
+      }
+    }
+
+    if (record.woman_id === partnerUser.id) {
+      throw new Error('You cannot link to your own account.');
+    }
+
+    // Atomically mark used & expire
+    record.used = true;
+    record.expires_at = new Date().toISOString();
+    save(PARTNER_CODES_KEY, codes);
+
+    // Clean up previous links and connect
+    let links = load<PartnerLink[]>(PARTNER_LINKS_KEY, []);
+    links = links.filter(l => !(l.partner_id === partnerUser!.id || l.woman_id === record.woman_id));
+
+    const linkId = `link_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newLink: PartnerLink = {
+      id: linkId,
+      woman_id: record.woman_id,
+      partner_id: partnerUser.id,
+      status: 'approved',
+      is_paused: false,
+      created_at: new Date().toISOString(),
+      approved_at: new Date().toISOString(),
+    };
+    links.push(newLink);
+    save(PARTNER_LINKS_KEY, links);
+
+    // Default permissions
+    const perms = load<Record<string, Record<PermissionKey, boolean>>>(SHARING_PERMS_KEY, {});
+    perms[linkId] = {
+      cycle_phase: true,
+      cycle_day: true,
+      period_status: true,
+      estimated_next_period: true,
+      mood: true,
+      energy: true,
+      symptoms: false,
+      flow: false,
+      sleep: false,
+      notes: false,
+      weight: false,
+    };
+    save(SHARING_PERMS_KEY, perms);
+
+    const { password_hash: _pass, ...profile } = partnerUser;
+    return { profile, linkId };
   },
 
   // 7. Partner Links
@@ -439,15 +530,41 @@ export const standaloneDb = {
   // 9. Masked Partner View
   async getPartnerView(partnerId: string): Promise<any> {
     const link = await this.getPartnerLink(partnerId, 'partner');
-    if (!link || link.status !== 'approved' || link.is_paused) {
+    if (!link) {
       return null;
     }
 
     const woman = this.findUserById(link.woman_id);
+    const womanName = woman?.full_name || 'Her';
+    const permissions = await this.getSharingPermissions(link.id);
+
+    // If paused, return paused structure
+    if (link.is_paused) {
+      return {
+        isConnected: true,
+        isPaused: true,
+        status: link.status,
+        womanName,
+        woman_name: womanName,
+        permissions,
+      };
+    }
+
+    // If pending, allow display of waiting status
+    if (link.status === 'pending') {
+      return {
+        isConnected: false,
+        isPending: true,
+        status: 'pending',
+        womanName,
+        woman_name: womanName,
+        permissions,
+      };
+    }
+
     const cycleProfile = await this.getCycleProfile(link.woman_id);
     const periods = await this.getPeriodLogs(link.woman_id);
-    const dailies = await this.getDailyLogs(link.woman_id, 30);
-    const permissions = await this.getSharingPermissions(link.id);
+    const dailies = await this.getDailyLogs(link.woman_id, 90);
 
     const latestDaily = dailies[0] || null;
     const cycleState = calculateCycleState(
@@ -455,19 +572,60 @@ export const standaloneDb = {
       periods
     );
 
+    const phaseNames: Record<string, string> = {
+      menstrual: 'Menstrual Phase',
+      follicular: 'Follicular Phase',
+      ovulation: 'Ovulation Phase',
+      luteal: 'Luteal Phase',
+    };
+
+    // Calculate calendarDays for PartnerCalendar
+    const calendarDays = [];
+    const now = new Date();
+    for (let offset = -45; offset <= 45; offset++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      const dateStr = d.toISOString().split('T')[0];
+      const hasPeriod = periods.some(p => p.start_date <= dateStr && (!p.end_date || p.end_date >= dateStr));
+      const daily = dailies.find(dl => dl.log_date === dateStr);
+      calendarDays.push({
+        date: dateStr,
+        hasPeriod: permissions.period_status ? hasPeriod : false,
+        mood: permissions.mood && daily?.mood ? daily.mood : null,
+        energy: permissions.energy && daily?.energy ? daily.energy : null,
+        flow: permissions.flow && daily?.flow ? daily.flow : null,
+        symptoms: permissions.symptoms && daily?.symptoms ? daily.symptoms : [],
+      });
+    }
+
     return {
+      isConnected: link.status === 'approved',
+      isPaused: Boolean(link.is_paused),
+      status: link.status,
+      womanName,
+      woman_name: womanName,
+      womanAvatarUrl: woman?.avatar_url,
       link_id: link.id,
       partner_id: partnerId,
       woman_id: link.woman_id,
-      woman_name: woman?.full_name || 'Her',
-      woman_avatar_url: woman?.avatar_url,
-      status: link.status,
-      is_paused: link.is_paused,
-      average_cycle_length: cycleProfile?.average_cycle_length || 28,
-      average_period_length: cycleProfile?.average_period_length || 5,
-      last_period_start: cycleProfile?.last_period_start,
       permissions,
-      // Permission-masked fields (notes and weight are NEVER included)
+      cycleData: {
+        currentPhase: permissions.cycle_phase ? cycleState.currentPhase : 'follicular',
+        phaseDisplayName: permissions.cycle_phase ? (phaseNames[cycleState.currentPhase] || 'Follicular Phase') : 'Follicular Phase',
+        currentCycleDay: permissions.cycle_day ? cycleState.currentCycleDay : 1,
+        totalCycleLength: cycleProfile?.average_cycle_length || 28,
+        isCurrentlyOnPeriod: permissions.period_status ? (cycleState.currentPhase === 'menstrual') : false,
+        daysUntilNextPeriod: permissions.estimated_next_period ? cycleState.daysUntilNextPeriod : null,
+        estimatedNextPeriodStart: permissions.estimated_next_period ? cycleState.estimatedNextPeriodStart : null,
+      },
+      todayLog: {
+        mood: permissions.mood && latestDaily ? latestDaily.mood : null,
+        energy: permissions.energy && latestDaily ? latestDaily.energy : null,
+        sleep_hours: permissions.sleep && latestDaily ? latestDaily.sleep_hours : null,
+        symptoms: permissions.symptoms && latestDaily ? latestDaily.symptoms : [],
+        flow: permissions.flow && latestDaily ? latestDaily.flow : null,
+      },
+      calendarDays,
+      // Flat properties for backward compatibility
       cycle_phase: permissions.cycle_phase ? cycleState.currentPhase : null,
       cycle_day: permissions.cycle_day ? cycleState.currentCycleDay : null,
       days_until_next_period: permissions.estimated_next_period ? cycleState.daysUntilNextPeriod : null,

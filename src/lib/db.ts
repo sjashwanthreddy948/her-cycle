@@ -10,6 +10,23 @@ import {
 } from '../types/database';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { standaloneDb } from './standaloneDb';
+import { normalizePartnerCode } from './codeUtils';
+
+function isMissingSchemaError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  const code = (err.code || '').toLowerCase();
+  return (
+    code === 'pgrst205' ||
+    code === '42p01' ||
+    code === '42883' ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find the table') ||
+    msg.includes('relation') ||
+    msg.includes('does not exist') ||
+    msg.includes('function')
+  );
+}
 
 export const db = {
   // 1. Profiles
@@ -17,35 +34,51 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getProfile(userId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error) throw error;
-    return data as UserProfile | null;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getProfile(userId);
+        throw error;
+      }
+      return data as UserProfile | null;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getProfile(userId);
+      throw e;
+    }
   },
 
   async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.updateProfile(userId, updates);
     }
-    const client = supabase;
-    const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
-    delete safeUpdates.role;
-    delete safeUpdates.id;
+    try {
+      const client = supabase;
+      const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
+      delete safeUpdates.role;
+      delete safeUpdates.id;
 
-    const { data, error } = await client
-      .from('profiles')
-      .update(safeUpdates)
-      .eq('id', userId)
-      .select()
-      .single();
+      const { data, error } = await client
+        .from('profiles')
+        .update(safeUpdates)
+        .eq('id', userId)
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data as UserProfile;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.updateProfile(userId, updates);
+        throw error;
+      }
+      return data as UserProfile;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.updateProfile(userId, updates);
+      throw e;
+    }
   },
 
   // 2. Active Session Enforcement
@@ -53,32 +86,48 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.upsertActiveSession(userId, sessionId, device);
     }
-    const client = supabase;
-    const { error } = await client
-      .from('active_sessions')
-      .upsert({
-        user_id: userId,
-        session_id: sessionId,
-        device: device || (typeof navigator !== 'undefined' ? navigator.userAgent : 'device'),
-        updated_at: new Date().toISOString(),
-      });
+    try {
+      const client = supabase;
+      const { error } = await client
+        .from('active_sessions')
+        .upsert({
+          user_id: userId,
+          session_id: sessionId,
+          device: device || (typeof navigator !== 'undefined' ? navigator.userAgent : 'device'),
+          updated_at: new Date().toISOString(),
+        });
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.upsertActiveSession(userId, sessionId, device);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.upsertActiveSession(userId, sessionId, device);
+      throw e;
+    }
   },
 
   async getActiveSession(userId: string): Promise<string | null> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getActiveSession(userId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('active_sessions')
-      .select('session_id')
-      .eq('user_id', userId)
-      .maybeSingle();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('active_sessions')
+        .select('session_id')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error) throw error;
-    return data?.session_id || null;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getActiveSession(userId);
+        throw error;
+      }
+      return data?.session_id || null;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getActiveSession(userId);
+      throw e;
+    }
   },
 
   // 3. Cycle Profile
@@ -86,34 +135,50 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getCycleProfile(userId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('cycle_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('cycle_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error) throw error;
-    return data as CycleProfile | null;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getCycleProfile(userId);
+        throw error;
+      }
+      return data as CycleProfile | null;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getCycleProfile(userId);
+      throw e;
+    }
   },
 
   async updateCycleProfile(userId: string, updates: Partial<CycleProfile>): Promise<CycleProfile> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.updateCycleProfile(userId, updates);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('cycle_profiles')
-      .upsert({
-        user_id: userId,
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('cycle_profiles')
+        .upsert({
+          user_id: userId,
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data as CycleProfile;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.updateCycleProfile(userId, updates);
+        throw error;
+      }
+      return data as CycleProfile;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.updateCycleProfile(userId, updates);
+      throw e;
+    }
   },
 
   // 4. Period Logs
@@ -121,61 +186,85 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getPeriodLogs(userId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('period_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('start_date', { ascending: false });
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('period_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('start_date', { ascending: false });
 
-    if (error) throw error;
-    return data as PeriodLog[];
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getPeriodLogs(userId);
+        throw error;
+      }
+      return data as PeriodLog[];
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getPeriodLogs(userId);
+      throw e;
+    }
   },
 
   async savePeriodLog(log: Omit<PeriodLog, 'id' | 'created_at'> & { id?: string }): Promise<PeriodLog> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.savePeriodLog(log);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('period_logs')
-      .upsert({
-        ...log,
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('period_logs')
+        .upsert({
+          ...log,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.savePeriodLog(log);
+        throw error;
+      }
 
-    const { data: latestPeriod } = await client
-      .from('period_logs')
-      .select('start_date')
-      .eq('user_id', log.user_id)
-      .order('start_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      const { data: latestPeriod } = await client
+        .from('period_logs')
+        .select('start_date')
+        .eq('user_id', log.user_id)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (latestPeriod) {
-      await this.updateCycleProfile(log.user_id, {
-        last_period_start: latestPeriod.start_date,
-      });
+      if (latestPeriod) {
+        await this.updateCycleProfile(log.user_id, {
+          last_period_start: latestPeriod.start_date,
+        });
+      }
+
+      return data as PeriodLog;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.savePeriodLog(log);
+      throw e;
     }
-
-    return data as PeriodLog;
   },
 
   async deletePeriodLog(id: string): Promise<void> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.deletePeriodLog(id);
     }
-    const client = supabase;
-    const { error } = await client
-      .from('period_logs')
-      .delete()
-      .eq('id', id);
+    try {
+      const client = supabase;
+      const { error } = await client
+        .from('period_logs')
+        .delete()
+        .eq('id', id);
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.deletePeriodLog(id);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.deletePeriodLog(id);
+      throw e;
+    }
   },
 
   // 5. Daily Health Logs
@@ -183,37 +272,53 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getDailyLogs(userId, limit);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('daily_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('log_date', { ascending: false })
-      .limit(limit);
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('daily_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('log_date', { ascending: false })
+        .limit(limit);
 
-    if (error) throw error;
-    return data as DailyLog[];
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getDailyLogs(userId, limit);
+        throw error;
+      }
+      return data as DailyLog[];
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getDailyLogs(userId, limit);
+      throw e;
+    }
   },
 
   async saveDailyLog(log: Omit<DailyLog, 'id' | 'created_at'> & { id?: string }): Promise<DailyLog> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.saveDailyLog(log);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('daily_logs')
-      .upsert(
-        {
-          ...log,
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,log_date' }
-      )
-      .select()
-      .single();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('daily_logs')
+        .upsert(
+          {
+            ...log,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,log_date' }
+        )
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data as DailyLog;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.saveDailyLog(log);
+        throw error;
+      }
+      return data as DailyLog;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.saveDailyLog(log);
+      throw e;
+    }
   },
 
   // 6. Partner Codes (HER-XXXXXX, 24h expiration, instant expiration on redemption)
@@ -221,17 +326,25 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getActivePartnerCode(womanId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('partner_codes')
-      .select('*')
-      .eq('woman_id', womanId)
-      .eq('used', false)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('partner_codes')
+        .select('*')
+        .eq('woman_id', womanId)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
 
-    if (error) throw error;
-    return data as PartnerCode | null;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getActivePartnerCode(womanId);
+        throw error;
+      }
+      return data as PartnerCode | null;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getActivePartnerCode(womanId);
+      throw e;
+    }
   },
 
   async generatePartnerCode(womanId?: string): Promise<string> {
@@ -239,23 +352,53 @@ export const db = {
       if (!womanId) throw new Error('Woman ID is required');
       return standaloneDb.generatePartnerCode(womanId);
     }
-    const client = supabase;
-    const { data, error } = await client.rpc('generate_partner_code');
-    if (error) throw error;
-    return data as string;
+    try {
+      const client = supabase;
+      const { data, error } = await client.rpc('generate_partner_code');
+      if (error) {
+        if (isMissingSchemaError(error) && womanId) return standaloneDb.generatePartnerCode(womanId);
+        throw error;
+      }
+      return data as string;
+    } catch (e) {
+      if (isMissingSchemaError(e) && womanId) return standaloneDb.generatePartnerCode(womanId);
+      throw e;
+    }
   },
 
   async redeemPartnerCode(code: string, partnerId?: string): Promise<{ success: boolean; link_id: string; status: string }> {
+    const clean = normalizePartnerCode(code);
     if (!isSupabaseConfigured || !supabase) {
       if (!partnerId) throw new Error('Partner ID is required');
-      return standaloneDb.redeemPartnerCode(partnerId, code);
+      return standaloneDb.redeemPartnerCode(partnerId, clean);
     }
-    const client = supabase;
-    const { data, error } = await client.rpc('redeem_partner_code', {
-      code_input: code.trim().toUpperCase(),
-    });
-    if (error) throw error;
-    return data;
+    try {
+      const client = supabase;
+      const { data, error } = await client.rpc('redeem_partner_code', {
+        code_input: clean,
+      });
+      if (error) {
+        if (isMissingSchemaError(error) && partnerId) {
+          return standaloneDb.redeemPartnerCode(partnerId, clean);
+        }
+        throw error;
+      }
+      return data;
+    } catch (err: any) {
+      if (partnerId && isMissingSchemaError(err)) {
+        return standaloneDb.redeemPartnerCode(partnerId, clean);
+      }
+      throw err;
+    }
+  },
+
+  async redeemAndCreatePartner(
+    code: string,
+    fullName?: string,
+    email?: string,
+    password?: string
+  ): Promise<{ profile: UserProfile; linkId: string }> {
+    return standaloneDb.redeemAndCreatePartner(code, fullName, email, password);
   },
 
   // 7. Partner Links
@@ -263,44 +406,55 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getPartnerLink(userId, role);
     }
-    const client = supabase;
-    if (role === 'woman') {
-      const { data, error } = await client
-        .from('partner_links')
-        .select(`
-          *,
-          partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
-        `)
-        .eq('woman_id', userId)
-        .maybeSingle();
+    try {
+      const client = supabase;
+      if (role === 'woman') {
+        const { data, error } = await client
+          .from('partner_links')
+          .select(`
+            *,
+            partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
+          `)
+          .eq('woman_id', userId)
+          .maybeSingle();
 
-      if (error) throw error;
-      if (!data) return null;
+        if (error) {
+          if (isMissingSchemaError(error)) return standaloneDb.getPartnerLink(userId, role);
+          throw error;
+        }
+        if (!data) return null;
 
-      const p = data.partner as any;
-      return {
-        ...data,
-        partner_name: p?.full_name,
-        partner_email: p?.email,
-      };
-    } else {
-      const { data, error } = await client
-        .from('partner_links')
-        .select(`
-          *,
-          woman:profiles!partner_links_woman_id_fkey(full_name, avatar_url, email)
-        `)
-        .eq('partner_id', userId)
-        .maybeSingle();
+        const p = data.partner as any;
+        return {
+          ...data,
+          partner_name: p?.full_name,
+          partner_email: p?.email,
+        };
+      } else {
+        const { data, error } = await client
+          .from('partner_links')
+          .select(`
+            *,
+            woman:profiles!partner_links_woman_id_fkey(full_name, avatar_url, email)
+          `)
+          .eq('partner_id', userId)
+          .maybeSingle();
 
-      if (error) throw error;
-      if (!data) return null;
+        if (error) {
+          if (isMissingSchemaError(error)) return standaloneDb.getPartnerLink(userId, role);
+          throw error;
+        }
+        if (!data) return null;
 
-      const w = data.woman as any;
-      return {
-        ...data,
-        woman_name: w?.full_name,
-      };
+        const w = data.woman as any;
+        return {
+          ...data,
+          woman_name: w?.full_name,
+        };
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getPartnerLink(userId, role);
+      throw e;
     }
   },
 
@@ -308,42 +462,66 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.approvePartnerLink(linkId);
     }
-    const client = supabase;
-    const { error } = await client
-      .from('partner_links')
-      .update({
-        status: 'approved',
-        approved_at: new Date().toISOString(),
-      })
-      .eq('id', linkId);
+    try {
+      const client = supabase;
+      const { error } = await client
+        .from('partner_links')
+        .update({
+          status: 'approved',
+          approved_at: new Date().toISOString(),
+        })
+        .eq('id', linkId);
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.approvePartnerLink(linkId);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.approvePartnerLink(linkId);
+      throw e;
+    }
   },
 
   async declinePartnerLink(linkId: string): Promise<void> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.declinePartnerLink(linkId);
     }
-    const client = supabase;
-    const { error } = await client
-      .from('partner_links')
-      .delete()
-      .eq('id', linkId);
+    try {
+      const client = supabase;
+      const { error } = await client
+        .from('partner_links')
+        .delete()
+        .eq('id', linkId);
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.declinePartnerLink(linkId);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.declinePartnerLink(linkId);
+      throw e;
+    }
   },
 
   async togglePausePartnerLink(linkId: string, isPaused: boolean): Promise<void> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.togglePausePartnerLink(linkId, isPaused);
     }
-    const client = supabase;
-    const { error } = await client
-      .from('partner_links')
-      .update({ is_paused: isPaused })
-      .eq('id', linkId);
+    try {
+      const client = supabase;
+      const { error } = await client
+        .from('partner_links')
+        .update({ is_paused: isPaused })
+        .eq('id', linkId);
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.togglePausePartnerLink(linkId, isPaused);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.togglePausePartnerLink(linkId, isPaused);
+      throw e;
+    }
   },
 
   async deletePartnerLink(linkId: string): Promise<void> {
@@ -355,32 +533,40 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getSharingPermissions(linkId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('sharing_permissions')
-      .select('permission_name, enabled')
-      .eq('link_id', linkId);
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('sharing_permissions')
+        .select('permission_name, enabled')
+        .eq('link_id', linkId);
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getSharingPermissions(linkId);
+        throw error;
+      }
 
-    const map: Partial<SharingPermissionsMap> = {};
-    (data || []).forEach(row => {
-      map[row.permission_name as PermissionKey] = row.enabled;
-    });
+      const map: Partial<SharingPermissionsMap> = {};
+      (data || []).forEach(row => {
+        map[row.permission_name as PermissionKey] = row.enabled;
+      });
 
-    return {
-      cycle_phase: map.cycle_phase ?? true,
-      cycle_day: map.cycle_day ?? true,
-      period_status: map.period_status ?? true,
-      estimated_next_period: map.estimated_next_period ?? true,
-      mood: map.mood ?? true,
-      energy: map.energy ?? true,
-      symptoms: map.symptoms ?? false,
-      flow: map.flow ?? false,
-      sleep: map.sleep ?? false,
-      notes: false,
-      weight: false,
-    };
+      return {
+        cycle_phase: map.cycle_phase ?? true,
+        cycle_day: map.cycle_day ?? true,
+        period_status: map.period_status ?? true,
+        estimated_next_period: map.estimated_next_period ?? true,
+        mood: map.mood ?? true,
+        energy: map.energy ?? true,
+        symptoms: map.symptoms ?? false,
+        flow: map.flow ?? false,
+        sleep: map.sleep ?? false,
+        notes: false,
+        weight: false,
+      };
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getSharingPermissions(linkId);
+      throw e;
+    }
   },
 
   async updateSharingPermission(linkId: string, permission: PermissionKey, enabled: boolean): Promise<void> {
@@ -388,53 +574,69 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.updateSharingPermission(linkId, permission, enabled);
     }
-    const client = supabase;
-    const { error } = await client
-      .from('sharing_permissions')
-      .upsert(
-        {
-          link_id: linkId,
-          permission_name: permission,
-          enabled,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'link_id,permission_name' }
-      );
+    try {
+      const client = supabase;
+      const { error } = await client
+        .from('sharing_permissions')
+        .upsert(
+          {
+            link_id: linkId,
+            permission_name: permission,
+            enabled,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'link_id,permission_name' }
+        );
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.updateSharingPermission(linkId, permission, enabled);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.updateSharingPermission(linkId, permission, enabled);
+      throw e;
+    }
   },
 
   async applySharingPreset(linkId: string, preset: 'basic' | 'standard' | 'custom'): Promise<void> {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.applySharingPreset(linkId, preset);
     }
-    const perms: Record<PermissionKey, boolean> = {
-      cycle_phase: true,
-      cycle_day: true,
-      period_status: true,
-      estimated_next_period: true,
-      mood: preset === 'standard',
-      energy: preset === 'standard',
-      symptoms: false,
-      flow: false,
-      sleep: false,
-      notes: false,
-      weight: false,
-    };
+    try {
+      const perms: Record<PermissionKey, boolean> = {
+        cycle_phase: true,
+        cycle_day: true,
+        period_status: true,
+        estimated_next_period: true,
+        mood: preset === 'standard',
+        energy: preset === 'standard',
+        symptoms: false,
+        flow: false,
+        sleep: false,
+        notes: false,
+        weight: false,
+      };
 
-    const updates = Object.entries(perms).map(([key, val]) => ({
-      link_id: linkId,
-      permission_name: key,
-      enabled: val,
-      updated_at: new Date().toISOString(),
-    }));
+      const updates = Object.entries(perms).map(([key, val]) => ({
+        link_id: linkId,
+        permission_name: key,
+        enabled: val,
+        updated_at: new Date().toISOString(),
+      }));
 
-    const client = supabase;
-    const { error } = await client
-      .from('sharing_permissions')
-      .upsert(updates, { onConflict: 'link_id,permission_name' });
+      const client = supabase;
+      const { error } = await client
+        .from('sharing_permissions')
+        .upsert(updates, { onConflict: 'link_id,permission_name' });
 
-    if (error) throw error;
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.applySharingPreset(linkId, preset);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.applySharingPreset(linkId, preset);
+      throw e;
+    }
   },
 
   // 9. Masked Partner View
@@ -442,21 +644,35 @@ export const db = {
     if (!isSupabaseConfigured || !supabase) {
       return standaloneDb.getPartnerView(partnerId);
     }
-    const client = supabase;
-    const { data, error } = await client
-      .from('partner_view')
-      .select('*')
-      .eq('partner_id', partnerId)
-      .maybeSingle();
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('partner_view')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .maybeSingle();
 
-    if (error) throw error;
-    if (!data) return null;
+      if (error) {
+        if (isMissingSchemaError(error)) {
+          return standaloneDb.getPartnerView(partnerId);
+        }
+        throw error;
+      }
+      if (!data) return standaloneDb.getPartnerView(partnerId);
 
-    return {
-      ...data,
-      notes: null,
-      weight_kg: null,
-    };
+      return {
+        ...data,
+        isConnected: data.status === 'approved',
+        isPaused: Boolean(data.is_paused),
+        notes: null,
+        weight_kg: null,
+      };
+    } catch (err: any) {
+      if (isMissingSchemaError(err)) {
+        return standaloneDb.getPartnerView(partnerId);
+      }
+      throw err;
+    }
   },
 
   async getPartnerViewData(partnerId: string): Promise<any> {
@@ -471,14 +687,18 @@ export const db = {
   async updatePeriodLog(id: string, updates: Partial<PeriodLog>): Promise<void> {
     const client = isSupabaseConfigured && supabase ? supabase : null;
     if (client) {
-      const { error } = await client.from('period_logs').update(updates).eq('id', id);
-      if (error) throw error;
-    } else {
-      const logs = await standaloneDb.getPeriodLogs(updates.user_id || '');
-      const existing = logs.find(l => l.id === id);
-      if (existing) {
-        await standaloneDb.savePeriodLog({ ...existing, ...updates });
+      try {
+        const { error } = await client.from('period_logs').update(updates).eq('id', id);
+        if (error && !isMissingSchemaError(error)) throw error;
+        if (!error) return;
+      } catch (e) {
+        if (!isMissingSchemaError(e)) throw e;
       }
+    }
+    const logs = await standaloneDb.getPeriodLogs(updates.user_id || '');
+    const existing = logs.find(l => l.id === id);
+    if (existing) {
+      await standaloneDb.savePeriodLog({ ...existing, ...updates });
     }
   },
 
@@ -500,15 +720,31 @@ export const db = {
       }
       return;
     }
-    const updates = Object.entries(permsOrPreset).map(([key, val]) => ({
-      link_id: linkId,
-      permission_name: key,
-      enabled: Boolean(val),
-      updated_at: new Date().toISOString(),
-    }));
-    const client = supabase;
-    const { error } = await client.from('sharing_permissions').upsert(updates, { onConflict: 'link_id,permission_name' });
-    if (error) throw error;
+    try {
+      const updates = Object.entries(permsOrPreset).map(([key, val]) => ({
+        link_id: linkId,
+        permission_name: key,
+        enabled: Boolean(val),
+        updated_at: new Date().toISOString(),
+      }));
+      const client = supabase;
+      const { error } = await client.from('sharing_permissions').upsert(updates, { onConflict: 'link_id,permission_name' });
+      if (error && isMissingSchemaError(error)) {
+        for (const [key, val] of Object.entries(permsOrPreset)) {
+          await standaloneDb.updateSharingPermission(linkId, key as PermissionKey, Boolean(val));
+        }
+        return;
+      }
+      if (error) throw error;
+    } catch (e) {
+      if (isMissingSchemaError(e)) {
+        for (const [key, val] of Object.entries(permsOrPreset)) {
+          await standaloneDb.updateSharingPermission(linkId, key as PermissionKey, Boolean(val));
+        }
+        return;
+      }
+      throw e;
+    }
   },
 
   // 10. Data Export (JSON & CSV)
@@ -535,8 +771,16 @@ export const db = {
       if (!userId) return;
       return standaloneDb.deleteUserAccount(userId);
     }
-    const client = supabase;
-    const { error } = await client.rpc('delete_user_account');
-    if (error) throw error;
+    try {
+      const client = supabase;
+      const { error } = await client.rpc('delete_user_account');
+      if (error) {
+        if (isMissingSchemaError(error) && userId) return standaloneDb.deleteUserAccount(userId);
+        throw error;
+      }
+    } catch (e) {
+      if (isMissingSchemaError(e) && userId) return standaloneDb.deleteUserAccount(userId);
+      throw e;
+    }
   },
 };
