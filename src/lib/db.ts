@@ -8,20 +8,16 @@ import {
   SharingPermissionsMap, 
   PermissionKey
 } from '../types/database';
-import { calculateCycleState } from './cycleCalculator';
 import { supabase, isSupabaseConfigured } from './supabase';
-
-function checkClient() {
-  if (!isSupabaseConfigured || !supabase) {
-    throw new Error('Supabase backend is not configured. Please supply VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.');
-  }
-  return supabase;
-}
+import { standaloneDb } from './standaloneDb';
 
 export const db = {
   // 1. Profiles
   async getProfile(userId: string): Promise<UserProfile | null> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getProfile(userId);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('profiles')
       .select('*')
@@ -33,8 +29,10 @@ export const db = {
   },
 
   async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
-    const client = checkClient();
-    // role is immutable per security policy, strip if present
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.updateProfile(userId, updates);
+    }
+    const client = supabase;
     const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
     delete safeUpdates.role;
     delete safeUpdates.id;
@@ -52,33 +50,43 @@ export const db = {
 
   // 2. Active Session Enforcement
   async upsertActiveSession(userId: string, sessionId: string, device?: string): Promise<void> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.upsertActiveSession(userId, sessionId, device);
+    }
+    const client = supabase;
     const { error } = await client
       .from('active_sessions')
       .upsert({
         user_id: userId,
         session_id: sessionId,
-        device: device || (typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : 'Browser'),
+        device: device || (typeof navigator !== 'undefined' ? navigator.userAgent : 'device'),
         updated_at: new Date().toISOString(),
       });
-    if (error) console.error('Failed to register active session:', error.message);
+
+    if (error) throw error;
   },
 
   async getActiveSession(userId: string): Promise<string | null> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getActiveSession(userId);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('active_sessions')
       .select('session_id')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (error || !data) return null;
-    return data.session_id;
+    if (error) throw error;
+    return data?.session_id || null;
   },
 
   // 3. Cycle Profile
   async getCycleProfile(userId: string): Promise<CycleProfile | null> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getCycleProfile(userId);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('cycle_profiles')
       .select('*')
@@ -90,7 +98,10 @@ export const db = {
   },
 
   async updateCycleProfile(userId: string, updates: Partial<CycleProfile>): Promise<CycleProfile> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.updateCycleProfile(userId, updates);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('cycle_profiles')
       .upsert({
@@ -107,7 +118,10 @@ export const db = {
 
   // 4. Period Logs
   async getPeriodLogs(userId: string): Promise<PeriodLog[]> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getPeriodLogs(userId);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('period_logs')
       .select('*')
@@ -115,88 +129,83 @@ export const db = {
       .order('start_date', { ascending: false });
 
     if (error) throw error;
-    return (data || []) as PeriodLog[];
+    return data as PeriodLog[];
   },
 
-  async addPeriodLog(log: Omit<PeriodLog, 'id'>): Promise<PeriodLog> {
-    const client = checkClient();
+  async savePeriodLog(log: Omit<PeriodLog, 'id' | 'created_at'> & { id?: string }): Promise<PeriodLog> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.savePeriodLog(log);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('period_logs')
-      .insert({
+      .upsert({
         ...log,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       })
       .select()
       .single();
 
     if (error) throw error;
 
-    // Keep cycle_profiles last_period_start in sync
-    await client
-      .from('cycle_profiles')
-      .update({ last_period_start: log.start_date, updated_at: new Date().toISOString() })
-      .eq('user_id', log.user_id);
-
-    return data as PeriodLog;
-  },
-
-  async updatePeriodLog(id: string, updates: Partial<PeriodLog>): Promise<PeriodLog> {
-    const client = checkClient();
-    const { data, error } = await client
+    const { data: latestPeriod } = await client
       .from('period_logs')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select()
-      .single();
+      .select('start_date')
+      .eq('user_id', log.user_id)
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error) throw error;
+    if (latestPeriod) {
+      await this.updateCycleProfile(log.user_id, {
+        last_period_start: latestPeriod.start_date,
+      });
+    }
+
     return data as PeriodLog;
   },
 
   async deletePeriodLog(id: string): Promise<void> {
-    const client = checkClient();
-    const { error } = await client.from('period_logs').delete().eq('id', id);
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.deletePeriodLog(id);
+    }
+    const client = supabase;
+    const { error } = await client
+      .from('period_logs')
+      .delete()
+      .eq('id', id);
+
     if (error) throw error;
   },
 
-  // 5. Daily Logs
-  async getDailyLogs(userId: string): Promise<DailyLog[]> {
-    const client = checkClient();
+  // 5. Daily Health Logs
+  async getDailyLogs(userId: string, limit = 90): Promise<DailyLog[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getDailyLogs(userId, limit);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('daily_logs')
       .select('*')
       .eq('user_id', userId)
-      .order('log_date', { ascending: false });
+      .order('log_date', { ascending: false })
+      .limit(limit);
 
     if (error) throw error;
-    return (data || []) as DailyLog[];
+    return data as DailyLog[];
   },
 
-  async getDailyLogForDate(userId: string, dateStr: string): Promise<DailyLog | null> {
-    const client = checkClient();
-    const { data, error } = await client
-      .from('daily_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('log_date', dateStr)
-      .maybeSingle();
-
-    if (error) throw error;
-    return data as DailyLog | null;
-  },
-
-  async saveDailyLog(log: Omit<DailyLog, 'id'>): Promise<DailyLog> {
-    const client = checkClient();
+  async saveDailyLog(log: Omit<DailyLog, 'id' | 'created_at'> & { id?: string }): Promise<DailyLog> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.saveDailyLog(log);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('daily_logs')
       .upsert(
         {
           ...log,
-          updated_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
         },
         { onConflict: 'user_id,log_date' }
       )
@@ -207,9 +216,12 @@ export const db = {
     return data as DailyLog;
   },
 
-  // 6. Partner Codes (Server generated, HER-XXXXXX, 24h expiration)
+  // 6. Partner Codes (HER-XXXXXX, 24h expiration, instant expiration on redemption)
   async getActivePartnerCode(womanId: string): Promise<PartnerCode | null> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getActivePartnerCode(womanId);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('partner_codes')
       .select('*')
@@ -222,17 +234,23 @@ export const db = {
     return data as PartnerCode | null;
   },
 
-  async generatePartnerCode(): Promise<string> {
-    const client = checkClient();
-    // Security Definer function on Postgres
+  async generatePartnerCode(womanId?: string): Promise<string> {
+    if (!isSupabaseConfigured || !supabase) {
+      if (!womanId) throw new Error('Woman ID is required');
+      return standaloneDb.generatePartnerCode(womanId);
+    }
+    const client = supabase;
     const { data, error } = await client.rpc('generate_partner_code');
     if (error) throw error;
     return data as string;
   },
 
-  async redeemPartnerCode(code: string): Promise<{ success: boolean; link_id: string; status: string }> {
-    const client = checkClient();
-    // Security Definer function with rate limit check on Postgres
+  async redeemPartnerCode(code: string, partnerId?: string): Promise<{ success: boolean; link_id: string; status: string }> {
+    if (!isSupabaseConfigured || !supabase) {
+      if (!partnerId) throw new Error('Partner ID is required');
+      return standaloneDb.redeemPartnerCode(partnerId, code);
+    }
+    const client = supabase;
     const { data, error } = await client.rpc('redeem_partner_code', {
       code_input: code.trim().toUpperCase(),
     });
@@ -242,7 +260,10 @@ export const db = {
 
   // 7. Partner Links
   async getPartnerLink(userId: string, role: 'woman' | 'partner'): Promise<PartnerLink | null> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getPartnerLink(userId, role);
+    }
+    const client = supabase;
     if (role === 'woman') {
       const { data, error } = await client
         .from('partner_links')
@@ -260,9 +281,8 @@ export const db = {
       return {
         ...data,
         partner_name: p?.full_name,
-        partner_avatar_url: p?.avatar_url,
         partner_email: p?.email,
-      } as PartnerLink;
+      };
     } else {
       const { data, error } = await client
         .from('partner_links')
@@ -280,13 +300,15 @@ export const db = {
       return {
         ...data,
         woman_name: w?.full_name,
-        woman_avatar_url: w?.avatar_url,
-      } as PartnerLink;
+      };
     }
   },
 
   async approvePartnerLink(linkId: string): Promise<void> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.approvePartnerLink(linkId);
+    }
+    const client = supabase;
     const { error } = await client
       .from('partner_links')
       .update({
@@ -299,31 +321,41 @@ export const db = {
   },
 
   async declinePartnerLink(linkId: string): Promise<void> {
-    const client = checkClient();
-    const { error } = await client.from('partner_links').delete().eq('id', linkId);
-    if (error) throw error;
-  },
-
-  async togglePausePartner(linkId: string, pause: boolean): Promise<boolean> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.declinePartnerLink(linkId);
+    }
+    const client = supabase;
     const { error } = await client
       .from('partner_links')
-      .update({ is_paused: pause })
+      .delete()
       .eq('id', linkId);
 
     if (error) throw error;
-    return pause;
   },
 
-  async disconnectPartner(linkId: string): Promise<void> {
-    const client = checkClient();
-    const { error } = await client.from('partner_links').delete().eq('id', linkId);
+  async togglePausePartnerLink(linkId: string, isPaused: boolean): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.togglePausePartnerLink(linkId, isPaused);
+    }
+    const client = supabase;
+    const { error } = await client
+      .from('partner_links')
+      .update({ is_paused: isPaused })
+      .eq('id', linkId);
+
     if (error) throw error;
+  },
+
+  async deletePartnerLink(linkId: string): Promise<void> {
+    await this.declinePartnerLink(linkId);
   },
 
   // 8. Sharing Permissions
   async getSharingPermissions(linkId: string): Promise<SharingPermissionsMap> {
-    const client = checkClient();
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getSharingPermissions(linkId);
+    }
+    const client = supabase;
     const { data, error } = await client
       .from('sharing_permissions')
       .select('permission_name, enabled')
@@ -346,24 +378,23 @@ export const db = {
       symptoms: map.symptoms ?? false,
       flow: map.flow ?? false,
       sleep: map.sleep ?? false,
-      notes: false, // NEVER SHARED
-      weight: false, // NEVER SHARED
+      notes: false,
+      weight: false,
     };
   },
 
-  async updateSharingPermission(linkId: string, key: PermissionKey, enabled: boolean): Promise<void> {
-    const client = checkClient();
-    // Safety check: notes and weight must never be enabled
-    if (key === 'notes' || key === 'weight') {
-      throw new Error('Private notes and weight cannot be shared with partner.');
+  async updateSharingPermission(linkId: string, permission: PermissionKey, enabled: boolean): Promise<void> {
+    if (permission === 'notes' || permission === 'weight') return;
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.updateSharingPermission(linkId, permission, enabled);
     }
-
+    const client = supabase;
     const { error } = await client
       .from('sharing_permissions')
       .upsert(
         {
           link_id: linkId,
-          permission_name: key,
+          permission_name: permission,
           enabled,
           updated_at: new Date().toISOString(),
         },
@@ -373,229 +404,139 @@ export const db = {
     if (error) throw error;
   },
 
-  async applyPreset(linkId: string, permissions: SharingPermissionsMap): Promise<void> {
-    const client = checkClient();
-    const entries = (Object.keys(permissions) as PermissionKey[]).map(key => ({
+  async applySharingPreset(linkId: string, preset: 'basic' | 'standard' | 'custom'): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.applySharingPreset(linkId, preset);
+    }
+    const perms: Record<PermissionKey, boolean> = {
+      cycle_phase: true,
+      cycle_day: true,
+      period_status: true,
+      estimated_next_period: true,
+      mood: preset === 'standard',
+      energy: preset === 'standard',
+      symptoms: false,
+      flow: false,
+      sleep: false,
+      notes: false,
+      weight: false,
+    };
+
+    const updates = Object.entries(perms).map(([key, val]) => ({
       link_id: linkId,
       permission_name: key,
-      // Enforce zero exposure for notes and weight
-      enabled: (key === 'notes' || key === 'weight') ? false : Boolean(permissions[key]),
+      enabled: val,
       updated_at: new Date().toISOString(),
     }));
 
+    const client = supabase;
     const { error } = await client
       .from('sharing_permissions')
-      .upsert(entries, { onConflict: 'link_id,permission_name' });
+      .upsert(updates, { onConflict: 'link_id,permission_name' });
 
     if (error) throw error;
   },
 
-  // 9. SECURE PARTNER VIEW (Database-Enforced Read-Only View)
-  async getPartnerViewData(partnerUserId: string) {
-    const client = checkClient();
-    
-    // Check if partner has any link first
-    const link = await this.getPartnerLink(partnerUserId, 'partner');
-    if (!link) {
-      return {
-        isConnected: false,
-        status: 'not_connected',
-        womanName: null,
-        womanAvatarUrl: null,
-        isPaused: false,
-        permissions: {} as Partial<SharingPermissionsMap>,
-        cycleData: null,
-        todayLog: null,
-        calendarDays: [],
-      };
+  // 9. Masked Partner View
+  async getPartnerView(partnerId: string): Promise<any> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getPartnerView(partnerId);
     }
-
-    if (link.status === 'pending') {
-      return {
-        isConnected: true,
-        status: 'pending',
-        womanName: link.woman_name || 'Partner',
-        womanAvatarUrl: link.woman_avatar_url || null,
-        isPaused: false,
-        permissions: {} as Partial<SharingPermissionsMap>,
-        cycleData: null,
-        todayLog: null,
-        calendarDays: [],
-      };
-    }
-
-    if (link.is_paused) {
-      return {
-        isConnected: true,
-        status: 'paused',
-        womanName: link.woman_name || 'Partner',
-        womanAvatarUrl: link.woman_avatar_url || null,
-        isPaused: true,
-        permissions: {} as Partial<SharingPermissionsMap>,
-        cycleData: null,
-        todayLog: null,
-        calendarDays: [],
-      };
-    }
-
-    // Query the database view `partner_view`
-    const { data: viewData, error } = await client
+    const client = supabase;
+    const { data, error } = await client
       .from('partner_view')
       .select('*')
+      .eq('partner_id', partnerId)
       .maybeSingle();
 
-    if (error || !viewData) {
-      return {
-        isConnected: true,
-        status: link.status,
-        womanName: link.woman_name || 'Partner',
-        womanAvatarUrl: link.woman_avatar_url || null,
-        isPaused: link.is_paused,
-        permissions: {} as Partial<SharingPermissionsMap>,
-        cycleData: null,
-        todayLog: null,
-        calendarDays: [],
-      };
-    }
-
-    const perms: SharingPermissionsMap = viewData.permissions || {};
-    const womanId = viewData.woman_id;
-
-    // Fetch cycle state using cycleCalculator
-    const cycleProfile: CycleProfile = {
-      user_id: womanId,
-      average_cycle_length: viewData.average_cycle_length || 28,
-      average_period_length: viewData.average_period_length || 5,
-      last_period_start: viewData.last_period_start,
-      goals: [],
-    };
-
-    // If period status permitted, fetch period logs
-    let periods: PeriodLog[] = [];
-    if (perms.period_status) {
-      const { data: pData } = await client
-        .from('period_logs')
-        .select('*')
-        .eq('user_id', womanId)
-        .order('start_date', { ascending: false });
-      periods = (pData || []) as PeriodLog[];
-    }
-
-    const rawCycle = calculateCycleState(cycleProfile, periods);
-
-    const sanitizedCycle = {
-      currentPhase: perms.cycle_phase ? rawCycle.currentPhase : null,
-      phaseDisplayName: perms.cycle_phase ? rawCycle.phaseDisplayName : null,
-      currentCycleDay: perms.cycle_day ? rawCycle.currentCycleDay : null,
-      totalCycleLength: perms.cycle_day ? rawCycle.totalCycleLength : null,
-      isCurrentlyOnPeriod: perms.period_status ? rawCycle.isCurrentlyOnPeriod : null,
-      daysUntilNextPeriod: perms.estimated_next_period ? rawCycle.daysUntilNextPeriod : null,
-      estimatedNextPeriodStart: perms.estimated_next_period ? rawCycle.estimatedNextPeriodStart : null,
-      progressPercent: perms.cycle_day ? rawCycle.progressPercent : 0,
-    };
-
-    // Today's log
-    const todayStr = new Date().toISOString().split('T')[0];
-    const { data: tData } = await client
-      .from('daily_logs')
-      .select('*')
-      .eq('user_id', womanId)
-      .eq('log_date', todayStr)
-      .maybeSingle();
-
-    const sanitizedToday = tData ? {
-      mood: perms.mood ? tData.mood : null,
-      energy: perms.energy ? tData.energy : null,
-      flow: perms.flow ? tData.flow : null,
-      sleep_hours: perms.sleep ? tData.sleep_hours : null,
-      symptoms: perms.symptoms ? (tData.symptoms || []) : [],
-      // notes & weight are NEVER sent
-      notes: null,
-      weight: null,
-    } : null;
-
-    // Monthly calendar days
-    const { data: allDailies } = await client
-      .from('daily_logs')
-      .select('log_date, flow, mood, energy, symptoms')
-      .eq('user_id', womanId)
-      .order('log_date', { ascending: false })
-      .limit(60);
-
-    const sanitizedCalendar = (allDailies || []).map(dl => ({
-      date: dl.log_date,
-      hasPeriod: perms.period_status && (dl.flow && dl.flow !== 'none'),
-      mood: perms.mood ? dl.mood : undefined,
-      energy: perms.energy ? dl.energy : undefined,
-      symptoms: perms.symptoms ? dl.symptoms : [],
-    }));
+    if (error) throw error;
+    if (!data) return null;
 
     return {
-      isConnected: true,
-      status: 'approved',
-      womanName: viewData.woman_name,
-      womanAvatarUrl: viewData.woman_avatar_url,
-      isPaused: false,
-      permissions: perms,
-      cycleData: sanitizedCycle,
-      todayLog: sanitizedToday,
-      calendarDays: sanitizedCalendar,
+      ...data,
+      notes: null,
+      weight_kg: null,
     };
   },
 
-  // 10. Privacy, Export & Cascading Account Deletion
-  async deleteUserAccount(): Promise<void> {
-    const client = checkClient();
-    const { error } = await client.rpc('delete_user_account');
-    if (error) {
-      // Fallback: delete profile manually (cascades)
-      const { data: userData } = await client.auth.getUser();
-      if (userData?.user?.id) {
-        await client.from('profiles').delete().eq('id', userData.user.id);
+  async getPartnerViewData(partnerId: string): Promise<any> {
+    return this.getPartnerView(partnerId);
+  },
+
+  // Compatibility Aliases for components
+  async addPeriodLog(log: Omit<PeriodLog, 'id' | 'created_at'>): Promise<PeriodLog> {
+    return this.savePeriodLog(log);
+  },
+
+  async updatePeriodLog(id: string, updates: Partial<PeriodLog>): Promise<void> {
+    const client = isSupabaseConfigured && supabase ? supabase : null;
+    if (client) {
+      const { error } = await client.from('period_logs').update(updates).eq('id', id);
+      if (error) throw error;
+    } else {
+      const logs = await standaloneDb.getPeriodLogs(updates.user_id || '');
+      const existing = logs.find(l => l.id === id);
+      if (existing) {
+        await standaloneDb.savePeriodLog({ ...existing, ...updates });
       }
     }
   },
 
-  async exportAllDataJson(userId: string): Promise<string> {
-    const client = checkClient();
-    const [profile, cycleProfile, periodLogs, dailyLogs] = await Promise.all([
-      client.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      client.from('cycle_profiles').select('*').eq('user_id', userId).maybeSingle(),
-      client.from('period_logs').select('*').eq('user_id', userId),
-      client.from('daily_logs').select('*').eq('user_id', userId),
-    ]);
+  async togglePausePartner(linkId: string, isPaused: boolean): Promise<void> {
+    return this.togglePausePartnerLink(linkId, isPaused);
+  },
 
-    const data = {
-      profile: profile.data,
-      cycleProfile: cycleProfile.data,
-      periodLogs: periodLogs.data || [],
-      dailyLogs: dailyLogs.data || [],
-      exportedAt: new Date().toISOString(),
-      appName: 'HerCycle',
-    };
-    return JSON.stringify(data, null, 2);
+  async disconnectPartner(linkId: string): Promise<void> {
+    return this.deletePartnerLink(linkId);
+  },
+
+  async applyPreset(linkId: string, permsOrPreset: 'basic' | 'standard' | 'custom' | SharingPermissionsMap): Promise<void> {
+    if (typeof permsOrPreset === 'string') {
+      return this.applySharingPreset(linkId, permsOrPreset);
+    }
+    if (!isSupabaseConfigured || !supabase) {
+      for (const [key, val] of Object.entries(permsOrPreset)) {
+        await standaloneDb.updateSharingPermission(linkId, key as PermissionKey, Boolean(val));
+      }
+      return;
+    }
+    const updates = Object.entries(permsOrPreset).map(([key, val]) => ({
+      link_id: linkId,
+      permission_name: key,
+      enabled: Boolean(val),
+      updated_at: new Date().toISOString(),
+    }));
+    const client = supabase;
+    const { error } = await client.from('sharing_permissions').upsert(updates, { onConflict: 'link_id,permission_name' });
+    if (error) throw error;
+  },
+
+  // 10. Data Export (JSON & CSV)
+  async exportAllDataJson(userId: string): Promise<string> {
+    const profile = await this.getProfile(userId);
+    const cycle = await this.getCycleProfile(userId);
+    const periods = await this.getPeriodLogs(userId);
+    const dailies = await this.getDailyLogs(userId);
+    return JSON.stringify({ profile, cycle, periods, dailies, exported_at: new Date().toISOString() }, null, 2);
   },
 
   async exportDataCsv(userId: string): Promise<string> {
-    const client = checkClient();
-    const { data: daily } = await client
-      .from('daily_logs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('log_date', { ascending: false });
+    const dailies = await this.getDailyLogs(userId);
+    const header = 'date,mood,energy,flow,sleep_hours,water_glasses,symptoms\n';
+    const rows = dailies.map(d => 
+      `${d.log_date},${d.mood || ''},${d.energy || ''},${d.flow || ''},${d.sleep_hours || ''},${d.water_glasses || ''},"${(d.symptoms || []).join(';')}"`
+    ).join('\n');
+    return header + rows;
+  },
 
-    const headers = ['Date', 'Flow', 'Mood', 'Energy', 'Sleep Hours', 'Water Glasses', 'Weight', 'Symptoms', 'Notes'];
-    const rows = (daily || []).map(d => [
-      d.log_date,
-      d.flow || '',
-      d.mood || '',
-      d.energy || '',
-      d.sleep_hours || '',
-      d.water_glasses || '',
-      d.weight || '',
-      (d.symptoms || []).join('; '),
-      `"${(d.notes || '').replace(/"/g, '""')}"`,
-    ]);
-    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  }
+  // 11. Cascading Account Deletion
+  async deleteUserAccount(userId?: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      if (!userId) return;
+      return standaloneDb.deleteUserAccount(userId);
+    }
+    const client = supabase;
+    const { error } = await client.rpc('delete_user_account');
+    if (error) throw error;
+  },
 };

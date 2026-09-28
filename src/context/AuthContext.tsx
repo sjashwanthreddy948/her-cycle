@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { UserProfile, UserRole } from '../types/database';
 import { db } from '../lib/db';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { standaloneDb, StandaloneUserRecord } from '../lib/standaloneDb';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -28,6 +29,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LOCAL_SESSION_KEY = 'hercycle_session_token';
+const STANDALONE_USER_KEY = 'hercycle_standalone_current_user_id';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -42,9 +44,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return sessionId;
   }, []);
 
-  // Check single active session against server
+  // Check single active session against server or local storage
   const verifyActiveSession = useCallback(async (currentUserId: string) => {
-    if (!isSupabaseConfigured || !supabase) return;
     try {
       const currentLocalSession = localStorage.getItem(LOCAL_SESSION_KEY);
       if (!currentLocalSession) return;
@@ -54,40 +55,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Another device logged in! Sign out immediately
         console.warn('Single-session violation: account opened on another device.');
         localStorage.removeItem(LOCAL_SESSION_KEY);
-        await supabase.auth.signOut();
+        localStorage.removeItem(STANDALONE_USER_KEY);
+        if (isSupabaseConfigured && supabase) {
+          await supabase.auth.signOut();
+        }
         setUser(null);
         setSessionError('You were signed out because your account was opened on another device.');
       }
     } catch (err) {
-      // Non-blocking network check
       console.debug('Session check error:', err);
     }
   }, []);
 
-  // Initialize Supabase Auth Session
+  // Initialize Auth Session
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
-      setIsLoading(false);
-      return;
-    }
-
-    const client = supabase;
-
     async function initSession() {
       try {
-        const { data: { session }, error } = await client.auth.getSession();
-        if (error) throw error;
+        if (isSupabaseConfigured && supabase) {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error) throw error;
 
-        if (session?.user) {
-          const profile = await db.getProfile(session.user.id);
-          if (profile) {
-            setUser(profile);
-            // Verify or set session
-            const localSession = localStorage.getItem(LOCAL_SESSION_KEY);
-            if (!localSession) {
-              await registerNewSession(session.user.id);
-            } else {
-              await verifyActiveSession(session.user.id);
+          if (session?.user) {
+            const profile = await db.getProfile(session.user.id);
+            if (profile) {
+              setUser(profile);
+              const localSession = localStorage.getItem(LOCAL_SESSION_KEY);
+              if (!localSession) {
+                await registerNewSession(session.user.id);
+              } else {
+                await verifyActiveSession(session.user.id);
+              }
+            }
+          }
+        } else {
+          // Standalone browser mode
+          const currentUserId = localStorage.getItem(STANDALONE_USER_KEY);
+          if (currentUserId) {
+            const profile = await standaloneDb.getProfile(currentUserId);
+            if (profile) {
+              setUser(profile);
+              const localSession = localStorage.getItem(LOCAL_SESSION_KEY);
+              if (!localSession) {
+                await registerNewSession(currentUserId);
+              } else {
+                await verifyActiveSession(currentUserId);
+              }
             }
           }
         }
@@ -100,20 +112,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initSession();
 
-    // Listen to real-time auth changes
-    const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const profile = await db.getProfile(session.user.id);
-        setUser(profile);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        localStorage.removeItem(LOCAL_SESSION_KEY);
-      }
-    });
+    if (isSupabaseConfigured && supabase) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const profile = await db.getProfile(session.user.id);
+          setUser(profile);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          localStorage.removeItem(LOCAL_SESSION_KEY);
+        }
+      });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
   }, [registerNewSession, verifyActiveSession]);
 
   // Single-active-session listener: checks every 60s and on tab focus
@@ -122,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const interval = setInterval(() => {
       verifyActiveSession(user.id);
-    }, 60000); // every 60s
+    }, 60000);
 
     const handleFocus = () => {
       verifyActiveSession(user.id);
@@ -139,39 +152,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user, verifyActiveSession]);
 
   const login = async (email: string, pass: string): Promise<UserProfile> => {
-    if (!isSupabaseConfigured || !supabase) {
-      throw new Error('Supabase backend is not configured.');
-    }
-
     setIsLoading(true);
     setSessionError(null);
     try {
       const cleanEmail = email.trim().toLowerCase();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: pass,
-      });
 
-      if (error) {
-        if (error.message.toLowerCase().includes('invalid login credentials')) {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: pass,
+        });
+
+        if (error) {
+          if (error.message.toLowerCase().includes('invalid login credentials')) {
+            throw new Error('Invalid email or password. Please verify your credentials.');
+          }
+          throw new Error(error.message);
+        }
+
+        if (!data.user) {
+          throw new Error('No user returned from login');
+        }
+
+        const profile = await db.getProfile(data.user.id);
+        if (!profile) {
+          throw new Error('Profile not found. Please contact support.');
+        }
+
+        await registerNewSession(data.user.id);
+        setUser(profile);
+        return profile;
+      } else {
+        // Standalone Mode Login
+        const found = standaloneDb.findUserByEmail(cleanEmail);
+        if (!found || found.password_hash !== pass) {
           throw new Error('Invalid email or password. Please verify your credentials.');
         }
-        throw new Error(error.message);
+        localStorage.setItem(STANDALONE_USER_KEY, found.id);
+        await registerNewSession(found.id);
+        const { password_hash: _password_hash, ...profile } = found;
+        setUser(profile);
+        return profile;
       }
-
-      if (!data.user) {
-        throw new Error('No user returned from login');
-      }
-
-      const profile = await db.getProfile(data.user.id);
-      if (!profile) {
-        throw new Error('Profile not found. Please contact support.');
-      }
-
-      // Upsert single active session
-      await registerNewSession(data.user.id);
-      setUser(profile);
-      return profile;
     } finally {
       setIsLoading(false);
     }
@@ -188,10 +210,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastPeriodStart?: string;
     goals?: string[];
   }): Promise<UserProfile> => {
-    if (!isSupabaseConfigured || !supabase) {
-      throw new Error('Supabase backend is not configured.');
-    }
-
     if (!params.password || params.password.length < 10) {
       throw new Error('Password must be at least 10 characters for account security.');
     }
@@ -201,81 +219,122 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const cleanEmail = params.email.trim().toLowerCase();
 
-      // 1. Sign up user via Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: params.password,
-        options: {
-          data: {
-            full_name: params.fullName.trim(),
-            role: params.role,
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: params.password,
+          options: {
+            data: {
+              full_name: params.fullName.trim(),
+              role: params.role,
+            },
           },
-        },
-      });
-
-      if (error) {
-        if (
-          error.message.toLowerCase().includes('already registered') ||
-          error.message.toLowerCase().includes('already exists') ||
-          error.status === 422
-        ) {
-          throw new Error('An account with this email already exists. Please log in.');
-        }
-        throw new Error(error.message);
-      }
-
-      if (!data.user) {
-        throw new Error('Registration failed. Please try again.');
-      }
-
-      const userId = data.user.id;
-
-      // 2. Create profile row in profiles table
-      const newProfile: UserProfile = {
-        id: userId,
-        email: cleanEmail,
-        full_name: params.fullName.trim(),
-        role: params.role,
-        age: params.age,
-        avatar_url: undefined,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert(newProfile);
-
-      if (profileError) {
-        if (profileError.code === '23505' || profileError.message.includes('unique')) {
-          throw new Error('An account with this email already exists. Please log in.');
-        }
-        throw profileError;
-      }
-
-      // 3. If woman, setup cycle profile
-      if (params.role === 'woman') {
-        await db.updateCycleProfile(userId, {
-          average_cycle_length: params.cycleLength || 28,
-          average_period_length: params.periodLength || 5,
-          last_period_start: params.lastPeriodStart || null,
-          goals: params.goals || ['cycle_tracking'],
         });
 
-        if (params.lastPeriodStart) {
-          await db.addPeriodLog({
-            user_id: userId,
-            start_date: params.lastPeriodStart,
-            flow: 'medium',
-            notes: 'Registered initial period',
-          });
+        if (error) {
+          if (
+            error.message.toLowerCase().includes('already registered') ||
+            error.message.toLowerCase().includes('already exists') ||
+            error.status === 422
+          ) {
+            throw new Error('An account with this email already exists. Please log in.');
+          }
+          throw new Error(error.message);
         }
-      }
 
-      // 4. Register active session
-      await registerNewSession(userId);
-      setUser(newProfile);
-      return newProfile;
+        if (!data.user) {
+          throw new Error('Registration failed. Please try again.');
+        }
+
+        const userId = data.user.id;
+
+        const newProfile: UserProfile = {
+          id: userId,
+          email: cleanEmail,
+          full_name: params.fullName.trim(),
+          role: params.role,
+          age: params.age,
+          avatar_url: undefined,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert(newProfile);
+
+        if (profileError) {
+          if (profileError.code === '23505' || profileError.message.includes('unique')) {
+            throw new Error('An account with this email already exists. Please log in.');
+          }
+          throw profileError;
+        }
+
+        if (params.role === 'woman') {
+          await db.updateCycleProfile(userId, {
+            average_cycle_length: params.cycleLength || 28,
+            average_period_length: params.periodLength || 5,
+            last_period_start: params.lastPeriodStart || null,
+          });
+
+          if (params.lastPeriodStart) {
+            await db.savePeriodLog({
+              user_id: userId,
+              start_date: params.lastPeriodStart,
+              flow: 'medium',
+              notes: 'Registered initial period',
+            });
+          }
+        }
+
+        await registerNewSession(userId);
+        setUser(newProfile);
+        return newProfile;
+      } else {
+        // Standalone Mode Registration
+        const existing = standaloneDb.findUserByEmail(cleanEmail);
+        if (existing) {
+          throw new Error('An account with this email already exists. Please log in.');
+        }
+
+        const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const record: StandaloneUserRecord = {
+          id: userId,
+          email: cleanEmail,
+          full_name: params.fullName.trim(),
+          role: params.role,
+          age: params.age,
+          avatar_url: undefined,
+          password_hash: params.password,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        standaloneDb.saveUser(record);
+
+        if (params.role === 'woman') {
+          await standaloneDb.updateCycleProfile(userId, {
+            average_cycle_length: params.cycleLength || 28,
+            average_period_length: params.periodLength || 5,
+            last_period_start: params.lastPeriodStart || null,
+          });
+
+          if (params.lastPeriodStart) {
+            await standaloneDb.savePeriodLog({
+              user_id: userId,
+              start_date: params.lastPeriodStart,
+              flow: 'medium',
+              notes: 'Registered initial period',
+            });
+          }
+        }
+
+        localStorage.setItem(STANDALONE_USER_KEY, userId);
+        await registerNewSession(userId);
+        const { password_hash: _password_hash, ...profile } = record;
+        setUser(profile);
+        return profile;
+      }
     } finally {
       setIsLoading(false);
     }
@@ -283,7 +342,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async (reason?: string) => {
     localStorage.removeItem(LOCAL_SESSION_KEY);
-    if (supabase) {
+    localStorage.removeItem(STANDALONE_USER_KEY);
+    if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
     }
     setUser(null);
@@ -299,7 +359,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteAccount = async () => {
     if (!user) return;
-    await db.deleteUserAccount();
+    await db.deleteUserAccount(user.id);
     await logout();
   };
 
@@ -308,7 +368,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isLoading,
-        isConfigured: isSupabaseConfigured,
+        isConfigured: true,
         sessionError,
         login,
         register,

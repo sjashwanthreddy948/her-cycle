@@ -222,7 +222,7 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const generatePartnerCode = async (): Promise<string> => {
     if (!user) throw new Error('Not authenticated');
     try {
-      const code = await db.generatePartnerCode();
+      const code = await db.generatePartnerCode(user.id);
       await refresh();
       addToast(`Generated new partner code: ${code}`, 'info');
       return code;
@@ -233,7 +233,8 @@ export const CycleProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const redeemPartnerCode = async (code: string) => {
-    const res = await db.redeemPartnerCode(code);
+    if (!user) throw new Error('Not authenticated');
+    const res = await db.redeemPartnerCode(code, user.id);
     await refresh();
     return res;
   };
