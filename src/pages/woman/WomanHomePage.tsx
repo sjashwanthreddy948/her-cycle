@@ -120,8 +120,9 @@ export const WomanHomePage: React.FC = () => {
           <span>Feminine Sanctuary</span>
         </div>
 
-        {/* 3D Ring with Her Circular Portrait in Center */}
-        <div className="my-auto py-2">
+        {/* 3D Ring with Her Circular Portrait in Center and Signature Arched Backdrop */}
+        <div className="relative my-auto py-2 flex items-center justify-center">
+          <div className="absolute bottom-0 w-[270px] sm:w-[320px] h-[300px] sm:h-[350px] rounded-t-full bg-gradient-to-t from-[#FFA785]/20 via-[#FFC3AD]/15 to-transparent border-t border-x border-rose-200/50 shadow-soft -z-10" />
           <CycleRing3D
             currentCycleDay={cycleState.currentCycleDay}
             totalCycleLength={cycleState.totalCycleLength}
