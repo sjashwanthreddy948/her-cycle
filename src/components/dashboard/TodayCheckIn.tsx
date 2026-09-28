@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useCycle } from '../../context/CycleContext';
-import { FlowLevel, MoodLevel, EnergyLevel } from '../../types/database';
+import type { FlowLevel, MoodLevel, EnergyLevel } from '../../types/database';
 import { SYMPTOMS_LIST } from '../../lib/constants';
 import { Droplet, Moon, GlassWater, Heart, Sparkles, Check } from 'lucide-react';
 
@@ -106,11 +106,10 @@ export const TodayCheckIn: React.FC = () => {
                 key={m.level}
                 type="button"
                 onClick={() => setMood(m.level)}
-                className={`flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-150 active:scale-95 border ${
-                  isSelected
-                    ? 'bg-rose-50 border-rose-400 text-rose-700 shadow-sm scale-105'
-                    : 'bg-gray-50/60 border-transparent hover:bg-rose-50/40 text-gray-600'
-                }`}
+                className={`flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-150 active:scale-95 border ${isSelected
+                  ? 'bg-rose-50 border-rose-400 text-rose-700 shadow-sm scale-105'
+                  : 'bg-gray-50/60 border-transparent hover:bg-rose-50/40 text-gray-600'
+                  }`}
               >
                 <span className="text-2xl mb-1">{m.emoji}</span>
                 <span className="text-[10px] font-medium leading-none">{m.label}</span>
@@ -133,11 +132,10 @@ export const TodayCheckIn: React.FC = () => {
                 key={e.level}
                 type="button"
                 onClick={() => setEnergy(e.level)}
-                className={`py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border ${
-                  isSelected
-                    ? 'bg-rose-500 border-rose-500 text-white shadow-sm shadow-rose-200'
-                    : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100'
-                }`}
+                className={`py-2 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border ${isSelected
+                  ? 'bg-rose-500 border-rose-500 text-white shadow-sm shadow-rose-200'
+                  : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100'
+                  }`}
               >
                 <span>{e.icon}</span>
                 <span>{e.label}</span>
@@ -160,11 +158,10 @@ export const TodayCheckIn: React.FC = () => {
                 key={f.level}
                 type="button"
                 onClick={() => setFlow(f.level)}
-                className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-2xl border transition-all ${
-                  isSelected
-                    ? 'bg-rose-50 border-rose-400 text-rose-600 shadow-sm'
-                    : 'bg-gray-50/70 border-gray-100 text-gray-500 hover:bg-rose-50/30'
-                }`}
+                className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-2xl border transition-all ${isSelected
+                  ? 'bg-rose-50 border-rose-400 text-rose-600 shadow-sm'
+                  : 'bg-gray-50/70 border-gray-100 text-gray-500 hover:bg-rose-50/30'
+                  }`}
               >
                 <div className="flex items-center justify-center h-6 mb-1">
                   {f.drops === 0 ? (
@@ -205,11 +202,10 @@ export const TodayCheckIn: React.FC = () => {
                 key={sym.id}
                 type="button"
                 onClick={() => toggleSymptom(sym.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 border ${
-                  isSelected
-                    ? 'bg-rose-500 text-white border-rose-500 shadow-xs'
-                    : 'bg-gray-50 text-gray-600 border-gray-100 hover:border-rose-200 hover:bg-rose-50/40'
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 border ${isSelected
+                  ? 'bg-rose-500 text-white border-rose-500 shadow-xs'
+                  : 'bg-gray-50 text-gray-600 border-gray-100 hover:border-rose-200 hover:bg-rose-50/40'
+                  }`}
               >
                 <span>{sym.icon}</span>
                 <span>{sym.name}</span>
