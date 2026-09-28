@@ -158,42 +158,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cleanEmail = email.trim().toLowerCase();
 
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: pass,
-        });
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: pass,
+          });
 
-        if (error) {
-          if (error.message.toLowerCase().includes('invalid login credentials')) {
-            throw new Error('Invalid email or password. Please verify your credentials.');
+          if (error) {
+            if (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('jwt')) {
+              // Fallback to standalone mode below
+            } else if (error.message.toLowerCase().includes('invalid login credentials')) {
+              throw new Error('Invalid email or password. Please verify your credentials.');
+            } else {
+              throw new Error(error.message);
+            }
+          } else if (data?.user) {
+            const profile = await db.getProfile(data.user.id);
+            if (!profile) {
+              throw new Error('Profile not found. Please contact support.');
+            }
+
+            await registerNewSession(data.user.id);
+            setUser(profile);
+            return profile;
           }
-          throw new Error(error.message);
+        } catch (err: any) {
+          if (!err?.message?.toLowerCase().includes('api key') && !err?.message?.toLowerCase().includes('jwt')) {
+            throw err;
+          }
         }
-
-        if (!data.user) {
-          throw new Error('No user returned from login');
-        }
-
-        const profile = await db.getProfile(data.user.id);
-        if (!profile) {
-          throw new Error('Profile not found. Please contact support.');
-        }
-
-        await registerNewSession(data.user.id);
-        setUser(profile);
-        return profile;
-      } else {
-        // Standalone Mode Login
-        const found = standaloneDb.findUserByEmail(cleanEmail);
-        if (!found || found.password_hash !== pass) {
-          throw new Error('Invalid email or password. Please verify your credentials.');
-        }
-        localStorage.setItem(STANDALONE_USER_KEY, found.id);
-        await registerNewSession(found.id);
-        const { password_hash: _password_hash, ...profile } = found;
-        setUser(profile);
-        return profile;
       }
+
+      // Standalone Mode Login
+      const found = standaloneDb.findUserByEmail(cleanEmail);
+      if (!found || found.password_hash !== pass) {
+        throw new Error('Invalid email or password. Please verify your credentials.');
+      }
+      localStorage.setItem(STANDALONE_USER_KEY, found.id);
+      await registerNewSession(found.id);
+      const { password_hash: _password_hash, ...profile } = found;
+      setUser(profile);
+      return profile;
     } finally {
       setIsLoading(false);
     }
@@ -220,121 +225,126 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cleanEmail = params.email.trim().toLowerCase();
 
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password: params.password,
-          options: {
-            data: {
+        try {
+          const { data, error } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: params.password,
+            options: {
+              data: {
+                full_name: params.fullName.trim(),
+                role: params.role,
+              },
+            },
+          });
+
+          if (error) {
+            if (error.message.toLowerCase().includes('api key') || error.message.toLowerCase().includes('jwt')) {
+              // Fallback to standalone mode below
+            } else if (
+              error.message.toLowerCase().includes('already registered') ||
+              error.message.toLowerCase().includes('already exists') ||
+              error.status === 422
+            ) {
+              throw new Error('An account with this email already exists. Please log in.');
+            } else {
+              throw new Error(error.message);
+            }
+          } else if (data?.user) {
+            const userId = data.user.id;
+
+            const newProfile: UserProfile = {
+              id: userId,
+              email: cleanEmail,
               full_name: params.fullName.trim(),
               role: params.role,
-            },
-          },
+              age: params.age,
+              avatar_url: undefined,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert(newProfile);
+
+            if (profileError) {
+              if (profileError.code === '23505' || profileError.message.includes('unique')) {
+                throw new Error('An account with this email already exists. Please log in.');
+              }
+              throw profileError;
+            }
+
+            if (params.role === 'woman') {
+              await db.updateCycleProfile(userId, {
+                average_cycle_length: params.cycleLength || 28,
+                average_period_length: params.periodLength || 5,
+                last_period_start: params.lastPeriodStart || null,
+              });
+
+              if (params.lastPeriodStart) {
+                await db.savePeriodLog({
+                  user_id: userId,
+                  start_date: params.lastPeriodStart,
+                  flow: 'medium',
+                  notes: 'Registered initial period',
+                });
+              }
+            }
+
+            await registerNewSession(userId);
+            setUser(newProfile);
+            return newProfile;
+          }
+        } catch (err: any) {
+          if (!err?.message?.toLowerCase().includes('api key') && !err?.message?.toLowerCase().includes('jwt')) {
+            throw err;
+          }
+        }
+      }
+
+      // Standalone Mode Registration
+      const existing = standaloneDb.findUserByEmail(cleanEmail);
+      if (existing) {
+        throw new Error('An account with this email already exists. Please log in.');
+      }
+
+      const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const record: StandaloneUserRecord = {
+        id: userId,
+        email: cleanEmail,
+        full_name: params.fullName.trim(),
+        role: params.role,
+        age: params.age,
+        avatar_url: undefined,
+        password_hash: params.password,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      standaloneDb.saveUser(record);
+
+      if (params.role === 'woman') {
+        await standaloneDb.updateCycleProfile(userId, {
+          average_cycle_length: params.cycleLength || 28,
+          average_period_length: params.periodLength || 5,
+          last_period_start: params.lastPeriodStart || null,
         });
 
-        if (error) {
-          if (
-            error.message.toLowerCase().includes('already registered') ||
-            error.message.toLowerCase().includes('already exists') ||
-            error.status === 422
-          ) {
-            throw new Error('An account with this email already exists. Please log in.');
-          }
-          throw new Error(error.message);
-        }
-
-        if (!data.user) {
-          throw new Error('Registration failed. Please try again.');
-        }
-
-        const userId = data.user.id;
-
-        const newProfile: UserProfile = {
-          id: userId,
-          email: cleanEmail,
-          full_name: params.fullName.trim(),
-          role: params.role,
-          age: params.age,
-          avatar_url: undefined,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert(newProfile);
-
-        if (profileError) {
-          if (profileError.code === '23505' || profileError.message.includes('unique')) {
-            throw new Error('An account with this email already exists. Please log in.');
-          }
-          throw profileError;
-        }
-
-        if (params.role === 'woman') {
-          await db.updateCycleProfile(userId, {
-            average_cycle_length: params.cycleLength || 28,
-            average_period_length: params.periodLength || 5,
-            last_period_start: params.lastPeriodStart || null,
+        if (params.lastPeriodStart) {
+          await standaloneDb.savePeriodLog({
+            user_id: userId,
+            start_date: params.lastPeriodStart,
+            flow: 'medium',
+            notes: 'Registered initial period',
           });
-
-          if (params.lastPeriodStart) {
-            await db.savePeriodLog({
-              user_id: userId,
-              start_date: params.lastPeriodStart,
-              flow: 'medium',
-              notes: 'Registered initial period',
-            });
-          }
         }
-
-        await registerNewSession(userId);
-        setUser(newProfile);
-        return newProfile;
-      } else {
-        // Standalone Mode Registration
-        const existing = standaloneDb.findUserByEmail(cleanEmail);
-        if (existing) {
-          throw new Error('An account with this email already exists. Please log in.');
-        }
-
-        const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const record: StandaloneUserRecord = {
-          id: userId,
-          email: cleanEmail,
-          full_name: params.fullName.trim(),
-          role: params.role,
-          age: params.age,
-          avatar_url: undefined,
-          password_hash: params.password,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-
-        standaloneDb.saveUser(record);
-
-        if (params.role === 'woman') {
-          await standaloneDb.updateCycleProfile(userId, {
-            average_cycle_length: params.cycleLength || 28,
-            average_period_length: params.periodLength || 5,
-            last_period_start: params.lastPeriodStart || null,
-          });
-
-          if (params.lastPeriodStart) {
-            await standaloneDb.savePeriodLog({
-              user_id: userId,
-              start_date: params.lastPeriodStart,
-              flow: 'medium',
-              notes: 'Registered initial period',
-            });
-          }
-        }
-
-        localStorage.setItem(STANDALONE_USER_KEY, userId);
-        await registerNewSession(userId);
-        const { password_hash: _password_hash, ...profile } = record;
-        setUser(profile);
-        return profile;
       }
+
+      localStorage.setItem(STANDALONE_USER_KEY, userId);
+      await registerNewSession(userId);
+      const { password_hash: _password_hash, ...profile } = record;
+      setUser(profile);
+      return profile;
     } finally {
       setIsLoading(false);
     }
