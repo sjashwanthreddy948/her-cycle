@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CycleProvider } from './context/CycleContext';
 import { Header } from './components/common/Header';
+import { DesktopNav } from './components/common/DesktopNav';
 import { Navbar } from './components/common/Navbar';
 import { ToastContainer } from './components/common/ToastContainer';
 import { BackendNotConfigured } from './components/common/BackendNotConfigured';
@@ -95,11 +96,26 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           {sessionError}
         </div>
       )}
-      <Header />
-      <main className="flex-1 max-w-md w-full mx-auto pb-6">
+      
+      {/* Desktop Top Navigation (hidden on mobile) */}
+      <div className="hidden md:block">
+        <DesktopNav />
+      </div>
+
+      {/* Mobile Top Header (hidden on desktop) */}
+      <div className="md:hidden">
+        <Header />
+      </div>
+
+      {/* Responsive Main Container */}
+      <main className="flex-1 w-full max-w-5xl mx-auto px-2 sm:px-4 pb-12 sm:pb-6">
         {children}
       </main>
-      <Navbar />
+
+      {/* Mobile Bottom Navigation Bar (hidden on desktop) */}
+      <div className="md:hidden">
+        <Navbar />
+      </div>
     </div>
   );
 };

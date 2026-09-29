@@ -4,9 +4,11 @@ import {
   PeriodLog, 
   DailyLog, 
   PartnerLink,
+  PartnerConnection,
   PartnerCode,
   SharingPermissionsMap, 
-  PermissionKey
+  PermissionKey,
+  AppNotification
 } from '../types/database';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { standaloneDb } from './standaloneDb';
@@ -782,5 +784,116 @@ export const db = {
       if (isMissingSchemaError(e) && userId) return standaloneDb.deleteUserAccount(userId);
       throw e;
     }
+  },
+
+  // 12. Pending Partner Requests
+  async getPendingPartnerRequests(womanUserId: string): Promise<PartnerConnection[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getPendingPartnerRequests(womanUserId);
+    }
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('partner_links')
+        .select(`
+          *,
+          partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
+        `)
+        .eq('woman_id', womanUserId)
+        .eq('status', 'pending');
+
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getPendingPartnerRequests(womanUserId);
+        throw error;
+      }
+      return (data || []).map((row: any) => ({
+        ...row,
+        woman_user_id: row.woman_id,
+        partner_user_id: row.partner_id,
+        partner_name: row.partner?.full_name,
+        partner_avatar_url: row.partner?.avatar_url,
+        partner_email: row.partner?.email,
+      }));
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getPendingPartnerRequests(womanUserId);
+      throw e;
+    }
+  },
+
+  async approvePartnerConnection(connectionId: string, womanUserId: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.approvePartnerConnection(connectionId, womanUserId);
+    }
+    try {
+      await this.approvePartnerLink(connectionId);
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.approvePartnerConnection(connectionId, womanUserId);
+      throw e;
+    }
+  },
+
+  async declinePartnerConnection(connectionId: string, womanUserId: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.declinePartnerConnection(connectionId, womanUserId);
+    }
+    try {
+      await this.declinePartnerLink(connectionId);
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.declinePartnerConnection(connectionId, womanUserId);
+      throw e;
+    }
+  },
+
+  // 13. Notifications
+  async getNotifications(userId: string): Promise<AppNotification[]> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.getNotifications(userId);
+    }
+    try {
+      const client = supabase;
+      const { data, error } = await client
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        if (isMissingSchemaError(error)) return standaloneDb.getNotifications(userId);
+        throw error;
+      }
+      return (data || []) as AppNotification[];
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.getNotifications(userId);
+      throw e;
+    }
+  },
+
+  async markNotificationRead(id: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) {
+      return standaloneDb.markNotificationRead(id);
+    }
+    try {
+      const client = supabase;
+      const { error } = await client.from('notifications').update({ read: true }).eq('id', id);
+      if (error && !isMissingSchemaError(error)) throw error;
+    } catch (e) {
+      if (isMissingSchemaError(e)) return standaloneDb.markNotificationRead(id);
+      throw e;
+    }
+  },
+
+  // 14. Password Management
+  async updatePassword(userId: string, currentPass: string, newPass: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) {
+        if (isMissingSchemaError(error)) {
+          return standaloneDb.updatePassword(userId, currentPass, newPass);
+        }
+        throw error;
+      }
+      return;
+    }
+    return standaloneDb.updatePassword(userId, currentPass, newPass);
   },
 };

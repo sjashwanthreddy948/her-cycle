@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCycle } from '../../context/CycleContext';
-import { CycleRing3D } from '../../components/3d/CycleRing3D';
+import { CycleProgressCircle } from '../../components/dashboard/CycleProgressCircle';
 import { TodayCheckIn } from '../../components/dashboard/TodayCheckIn';
 import { PhaseCards } from '../../components/dashboard/PhaseCards';
 import { CYCLE_PHASES_DATA } from '../../lib/constants';
@@ -19,7 +19,11 @@ import {
   Smile, 
   BatteryCharging,
   ShieldCheck,
-  ChevronDown
+  Plus,
+  Users,
+  ChevronRight,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -44,7 +48,14 @@ export const WomanHomePage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Handle profile photo upload
+  // Time-based greeting helper
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -76,10 +87,10 @@ export const WomanHomePage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 max-w-md mx-auto p-4 animate-pulse">
-        <div className="h-96 bg-white/60 rounded-3xl" />
-        <div className="h-64 bg-white/60 rounded-3xl" />
-        <div className="h-64 bg-white/60 rounded-3xl" />
+      <div className="space-y-4 max-w-xl mx-auto p-4 animate-pulse">
+        <div className="h-32 bg-white/70 rounded-4xl" />
+        <div className="h-80 bg-white/70 rounded-4xl" />
+        <div className="h-48 bg-white/70 rounded-4xl" />
       </div>
     );
   }
@@ -89,17 +100,12 @@ export const WomanHomePage: React.FC = () => {
   const isConnected = partnerLink && (partnerLink.status === 'approved');
   const isPending = partnerLink && partnerLink.status === 'pending';
   const isPaused = partnerLink?.is_paused || partnerLink?.status === 'paused';
-
-  // Compute confidence level based on cycles recorded
-  const cyclesCount = stats.totalCyclesLogged || 0;
-  const confidenceText = cyclesCount >= 3
-    ? `High confidence · Calibrated over ${cyclesCount} recorded cycles`
-    : cyclesCount >= 1
-    ? `Moderate confidence · Refining estimates (${cyclesCount} cycle recorded)`
-    : `Initial baseline prediction · Calibrates with each logged period`;
+  const womanFirstName = user?.full_name?.split(' ')[0] || 'Sarah';
+  const avatarUrl = user?.avatar_url || '/assets/woman-portrait.png';
 
   return (
-    <div className="max-w-md mx-auto px-4 pb-24 space-y-12">
+    <div className="max-w-2xl mx-auto px-4 pb-24 space-y-8 animate-in fade-in duration-200">
+      
       {/* Hidden file input for photo upload */}
       <input
         type="file"
@@ -111,404 +117,254 @@ export const WomanHomePage: React.FC = () => {
       />
 
       {/* ======================================================== */}
-      {/* SECTION A: HERO (Full view with 3D Ring & Woman Portrait) */}
+      {/* 1. TOP GREETING & PROFILE BAR (Section 14 & 15)          */}
       {/* ======================================================== */}
-      <section className="min-h-[85vh] flex flex-col items-center justify-between py-6 text-center">
-        {/* Top welcome chip */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 backdrop-blur-md border border-rose-200/60 shadow-xs text-rose-700 text-xs font-bold mb-2">
-          <Sparkles className="w-3.5 h-3.5 text-rose-500" />
-          <span>Feminine Sanctuary</span>
-        </div>
-
-        {/* 3D Ring with Her Circular Portrait in Center and Signature Arched Backdrop */}
-        <div className="relative my-auto py-2 flex items-center justify-center">
-          <div className="absolute bottom-0 w-[270px] sm:w-[320px] h-[300px] sm:h-[350px] rounded-t-full bg-gradient-to-t from-[#FFA785]/20 via-[#FFC3AD]/15 to-transparent border-t border-x border-rose-200/50 shadow-soft -z-10" />
-          <CycleRing3D
-            currentCycleDay={cycleState.currentCycleDay}
-            totalCycleLength={cycleState.totalCycleLength}
-            userAvatarUrl={user?.avatar_url}
-            userName={user?.full_name}
-            isLandingPage={false}
-            onAddPhotoClick={() => fileInputRef.current?.click()}
-          />
-        </div>
-
-        {/* Beneath Ring: Name, Age, Phase & Day Chips */}
-        <div className="w-full space-y-3 pt-2">
-          <div>
-            <h1 className="text-3xl font-extrabold font-display text-gray-900 tracking-tight leading-tight">
-              {user?.full_name || 'HerCycle Member'}
-            </h1>
-            {user?.age && (
-              <p className="text-xs font-semibold text-rose-600 tracking-wide mt-0.5">
-                {user.age} years old
-              </p>
-            )}
-          </div>
-
-          {/* Small Status Chips: Current Phase & Cycle Day */}
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-xs ${phaseInfo.badgeBg} ${phaseInfo.badgeText}`}>
-              {phaseInfo.name}
-            </span>
-
-            {cycleState.hasLoggedCycle ? (
-              <span className="px-3 py-1 rounded-full bg-white/90 backdrop-blur-md border border-rose-200 text-gray-800 text-xs font-bold shadow-xs">
-                Day {cycleState.currentCycleDay} of {cycleState.totalCycleLength}
-              </span>
-            ) : (
-              <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">
-                No logs recorded yet
-              </span>
-            )}
-          </div>
-
-          <p className="text-xs text-gray-500 max-w-xs mx-auto italic">
-            "{phaseInfo.tagline}"
-          </p>
-        </div>
-
-        {/* Smooth scroll cue indicator */}
-        <div className="pt-4 text-gray-400 flex flex-col items-center animate-bounce">
-          <ChevronDown className="w-4 h-4 text-rose-400" />
-        </div>
-      </section>
-
-      {/* ======================================================== */}
-      {/* SECTION B: NEXT PERIOD PREDICTION CARD                   */}
-      {/* ======================================================== */}
-      <section className="py-2">
-        <div className="bg-white/90 backdrop-blur-md rounded-4xl p-6 shadow-float border border-rose-100/80 relative overflow-hidden">
-          {/* Subtle soft ambient glow in card */}
-          <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-rose-100/60 to-transparent rounded-full blur-2xl pointer-events-none -mr-10 -mt-10" />
-
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
-                <Calendar className="w-4 h-4" />
-              </div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
-                Next Period Prediction
-              </h2>
-            </div>
-            {cycleState.isCurrentlyOnPeriod && (
-              <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-xs font-bold animate-pulse">
-                Active Period
-              </span>
-            )}
-          </div>
-
-          {cycleState.hasLoggedCycle ? (
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-extrabold font-display text-gray-900 tracking-tight">
-                    {cycleState.daysUntilNextPeriod === 0
-                      ? 'Expected Today'
-                      : cycleState.daysUntilNextPeriod === 1
-                      ? 'In 1 day'
-                      : `In ${cycleState.daysUntilNextPeriod} days`}
-                  </span>
-                </div>
-                <p className="text-sm font-semibold text-rose-600 mt-1">
-                  Estimated start: {cycleState.estimatedNextPeriodStart}
-                </p>
-              </div>
-
-              {/* Progress bar across cycle */}
-              <div>
-                <div className="flex justify-between text-[11px] font-semibold text-gray-400 mb-1">
-                  <span>Cycle Day {cycleState.currentCycleDay}</span>
-                  <span>{cycleState.totalCycleLength} Days Total</span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-rose-50 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-700"
-                    style={{ width: `${cycleState.progressPercent}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Confidence note */}
-              <div className="p-3 bg-rose-50/60 rounded-2xl border border-rose-100 text-[11px] text-gray-600 flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                <span>{confidenceText}</span>
-              </div>
-            </div>
-          ) : (
-            /* Empty State for Brand-New User */
-            <div className="py-6 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-500 mx-auto">
-                <Calendar className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-gray-800">
-                Log your last period to see your prediction
-              </h3>
-              <p className="text-xs text-gray-500 max-w-xs mx-auto">
-                HerCycle needs just one period date to begin calculating your personalized rhythm and phases.
-              </p>
-              <button
-                onClick={() => navigate('/woman/log')}
-                className="px-6 py-2.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-soft transition"
-              >
-                Log Period Now
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ======================================================== */}
-      {/* SECTION C: HEALTH CONDITION TODAY CARD                   */}
-      {/* ======================================================== */}
-      <section className="py-2">
-        <div className="bg-white/90 backdrop-blur-md rounded-4xl p-6 shadow-float border border-rose-100/80 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-rose-50">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 block">
-                Daily Wellness
-              </span>
-              <h2 className="text-lg font-bold font-display text-gray-900">
-                Health Condition Today
-              </h2>
-            </div>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${phaseInfo.badgeBg} ${phaseInfo.badgeText}`}>
-              {phaseInfo.name}
-            </span>
-          </div>
-
-          {/* Energy, Mood, Sleep, Water grid */}
-          <div className="grid grid-cols-2 gap-2.5 text-xs">
-            <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 flex items-center gap-2.5">
-              <Smile className="w-5 h-5 text-rose-500" />
-              <div>
-                <span className="text-[10px] text-gray-400 block font-semibold">MOOD</span>
-                <span className="font-bold text-gray-800 capitalize">
-                  {todayLog?.mood || 'Not logged yet'}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 flex items-center gap-2.5">
-              <BatteryCharging className="w-5 h-5 text-amber-500" />
-              <div>
-                <span className="text-[10px] text-gray-400 block font-semibold">ENERGY</span>
-                <span className="font-bold text-gray-800 capitalize">
-                  {todayLog?.energy || 'Not logged yet'}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 flex items-center gap-2.5">
-              <Moon className="w-5 h-5 text-indigo-500" />
-              <div>
-                <span className="text-[10px] text-gray-400 block font-semibold">SLEEP</span>
-                <span className="font-bold text-gray-800">
-                  {todayLog?.sleep_hours ? `${todayLog.sleep_hours} hrs` : 'Resting well'}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 flex items-center gap-2.5">
-              <Droplet className="w-5 h-5 text-sky-500" />
-              <div>
-                <span className="text-[10px] text-gray-400 block font-semibold">HYDRATION</span>
-                <span className="font-bold text-gray-800">
-                  {todayLog?.water_glasses ? `${todayLog.water_glasses} glasses` : 'Stay hydrated'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 2–3 Gentle Non-Medical Care Tips for the Phase */}
-          <div className="p-4 bg-gradient-to-tr from-rose-50/60 to-pink-50/40 rounded-3xl border border-rose-100/80 space-y-2">
-            <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wide flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              Gentle Care for {phaseInfo.name}
-            </span>
-            <ul className="space-y-1.5 text-xs text-gray-700 leading-relaxed">
-              <li className="flex items-start gap-2">
-                <span className="text-rose-500 font-bold">•</span>
-                <span><strong>Self-Care:</strong> {phaseInfo.wellnessSuggestions.selfCare}</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-rose-500 font-bold">•</span>
-                <span><strong>Nutrition:</strong> {phaseInfo.wellnessSuggestions.nutrition}</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-rose-500 font-bold">•</span>
-                <span><strong>Movement:</strong> {phaseInfo.wellnessSuggestions.exercise}</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Mandatory Non-Medical Disclaimer */}
-          <p className="text-[10px] text-gray-400 text-center italic">
-            Estimates only — not a medical device or contraception.
-          </p>
-        </div>
-      </section>
-
-      {/* ======================================================== */}
-      {/* SECTION D: PARTNER SHARING SECTION                       */}
-      {/* ======================================================== */}
-      <section className="py-2">
-        <div className="bg-white/90 backdrop-blur-md rounded-4xl p-6 shadow-float border border-rose-100/80 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-rose-50">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
-                <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold font-display text-gray-900">
-                  Partner Sharing Sanctuary
-                </h2>
-                <span className="text-[10px] text-gray-500">
-                  Encrypted · Read-only access for partner
-                </span>
-              </div>
-            </div>
-
-            {isConnected && (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                {isPaused ? 'Paused' : 'Active'}
-              </span>
-            )}
-          </div>
-
-          {/* Pending Connection Alert */}
-          {isPending && partnerLink && (
-            <div className="p-4 rounded-3xl bg-amber-50 border border-amber-200 text-xs space-y-3">
-              <div>
-                <span className="font-bold text-gray-900 block">Pending Connection Request</span>
-                <p className="text-gray-600 mt-0.5">
-                  <strong className="text-rose-600">{partnerLink.partner_name || 'Your partner'}</strong> ({partnerLink.partner_email || 'partner'}) has entered your code and requested access.
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => declinePartner(partnerLink.id)}
-                  className="flex-1 py-2 rounded-full bg-white border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 text-xs"
-                >
-                  Decline
-                </button>
-                <button
-                  onClick={() => approvePartner(partnerLink.id)}
-                  className="flex-1 py-2 rounded-full bg-rose-500 text-white font-bold hover:bg-rose-600 text-xs shadow-xs"
-                >
-                  Approve Connection
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Active Connection Controls */}
-          {isConnected && partnerLink ? (
-            <div className="space-y-3">
-              <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-100 flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-gray-900 text-xs block">
-                    Paired with {partnerLink.partner_name || 'Partner'}
-                  </span>
-                  <span className="text-[11px] text-gray-500">
-                    {isPaused ? 'Sharing is paused' : 'Real-time read-only sync'}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => togglePauseSharing(!isPaused)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 border transition ${
-                    isPaused
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                      : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-                  }`}
-                >
-                  {isPaused ? <Play className="w-3 h-3 fill-emerald-600 text-emerald-600" /> : <Pause className="w-3 h-3 fill-amber-600 text-amber-600" />}
-                  <span>{isPaused ? 'Resume' : 'Pause'}</span>
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between text-xs pt-1">
-                <button
-                  onClick={() => navigate('/woman/partner')}
-                  className="text-rose-600 font-bold hover:underline"
-                >
-                  Customize Shared Fields →
-                </button>
-                <button
-                  onClick={disconnectPartner}
-                  className="text-red-500 hover:text-red-700 flex items-center gap-1"
-                >
-                  <UserMinus className="w-3.5 h-3.5" />
-                  <span>Unlink</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Invite Code Display when not connected */
-            <div className="text-center space-y-3">
-              <p className="text-xs text-gray-600 leading-relaxed max-w-xs mx-auto">
-                Share this unique 6-character code with your partner to enable synced support.
-              </p>
-
-              {partnerCode?.code ? (
-                <div className="space-y-2">
-                  <div className="p-4 bg-rose-50/80 rounded-2xl border border-rose-200 flex items-center justify-between max-w-xs mx-auto">
-                    <span className="font-mono text-xl font-extrabold tracking-widest text-rose-600">
-                      {partnerCode.code}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyCode(partnerCode.code)}
-                      className="p-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 active:scale-95 transition"
-                      title="Copy code"
-                    >
-                      {copiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <span className="text-[10px] text-gray-400 block font-medium">
-                    Expires in 24 hours · Single use only (expires immediately once entered)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={generatePartnerCode}
-                    className="text-xs text-rose-600 font-semibold hover:underline"
-                  >
-                    Regenerate Code
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={generatePartnerCode}
-                  className="px-6 py-3 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-soft transition"
-                >
-                  Generate Connection Code
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ======================================================== */}
-      {/* SECTION E: TODAY'S CHECK-IN & DETAILED INSIGHTS          */}
-      {/* ======================================================== */}
-      <section className="space-y-6 pt-2">
+      <div className="flex items-center justify-between pt-2">
         <div>
-          <h2 className="text-lg font-bold font-display text-gray-900 mb-1">
-            Today's Check-in
-          </h2>
-          <p className="text-xs text-gray-500">
-            Log physical sensations, mood, sleep, and symptoms.
+          <h1 className="text-2xl sm:text-3xl font-black font-display text-gray-900 tracking-tight">
+            {getGreeting()}, {womanFirstName}
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            Here's your cycle at a glance.
           </p>
         </div>
 
-        {/* Existing Interactive Check-in Component */}
-        <TodayCheckIn />
+        {/* Profile Avatar */}
+        <div 
+          onClick={() => fileInputRef.current?.click()} 
+          className="relative cursor-pointer group"
+          title="Click to update photo"
+        >
+          <img
+            src={avatarUrl}
+            alt={user?.full_name || 'Sarah'}
+            className="w-13 h-13 sm:w-14 sm:h-14 rounded-full object-cover ring-2 ring-rose-200 group-hover:ring-rose-400 shadow-sm transition"
+          />
+          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full ring-2 ring-white" />
+        </div>
+      </div>
 
-        {/* 4 Cycle Phases Overview Carousel */}
+      {/* ======================================================== */}
+      {/* 2. PENDING PARTNER APPROVAL CARD (If requested)          */}
+      {/* ======================================================== */}
+      {isPending && partnerLink && (
+        <div className="bg-gradient-to-br from-amber-50 to-rose-50 border-2 border-rose-300 rounded-4xl p-5 sm:p-6 shadow-float animate-in fade-in">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-600">
+              Partner Connection Request
+            </span>
+            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+              Pending
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3.5 mb-3 bg-white/90 p-3.5 rounded-3xl border border-rose-100">
+            {partnerLink.partner_avatar_url ? (
+              <img
+                src={partnerLink.partner_avatar_url}
+                alt={partnerLink.partner_name || 'Partner'}
+                className="w-11 h-11 rounded-full object-cover ring-2 ring-rose-200"
+              />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-sm">
+                {(partnerLink.partner_name || 'P').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h4 className="text-xs font-bold text-gray-900">
+                {partnerLink.partner_name || 'Partner'}
+              </h4>
+              <p className="text-[11px] text-gray-500">
+                {partnerLink.partner_email || 'partner@example.com'}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-700 leading-relaxed mb-4">
+            Would you like to connect this account? Once approved, your partner can view only the fields you choose to share.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => declinePartner(partnerLink.id)}
+              className="py-2.5 rounded-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold text-xs transition"
+            >
+              Decline
+            </button>
+            <button
+              onClick={() => approvePartner(partnerLink.id)}
+              className="py-2.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition"
+            >
+              Approve
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 3. LARGE CIRCULAR CYCLE PROGRESS VISUALIZATION (Section 14) */}
+      {/* ======================================================== */}
+      <section className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100/80 flex flex-col items-center justify-center relative overflow-hidden">
+        
+        {/* Decorative corner accent badge */}
+        <div className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-bold">
+          <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+          <span>Natural Rhythm</span>
+        </div>
+
+        {/* Circular Visualization */}
+        <CycleProgressCircle
+          currentDay={cycleState.currentCycleDay}
+          totalDays={cycleState.totalCycleLength}
+          phase={cycleState.currentPhase}
+          daysUntilNextPeriod={cycleState.daysUntilNextPeriod}
+          onPeriod={cycleState.isCurrentlyOnPeriod}
+          avatarUrl={avatarUrl}
+          userName={user?.full_name}
+          size={300}
+        />
+
+        {/* Subtle tagline */}
+        <p className="text-xs text-gray-400 italic text-center mt-2">
+          "{phaseInfo.tagline}"
+        </p>
+      </section>
+
+      {/* ======================================================== */}
+      {/* 4. TODAY'S VITALS & QUICK LOG BUTTON (Section 14)        */}
+      {/* ======================================================== */}
+      <section className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100/80 space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-500 block">
+              TODAY'S SUMMARY
+            </span>
+            <h2 className="text-lg font-bold font-display text-gray-900 mt-0.5">
+              Today's Vitals
+            </h2>
+          </div>
+
+          {/* Button: [+ Add Today's Log] */}
+          <button
+            onClick={() => navigate('/woman/log')}
+            className="px-4 py-2 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition flex items-center gap-1.5 active:scale-95"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Add Today's Log</span>
+          </button>
+        </div>
+
+        {/* Vitals Grid: Mood, Energy, Symptoms, Sleep, Water */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center">
+          
+          {/* Mood */}
+          <div className="p-3.5 rounded-3xl bg-rose-50/60 border border-rose-100 flex flex-col items-center justify-center">
+            <Smile className="w-4 h-4 text-rose-500 mb-1" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase">Mood</span>
+            <span className="text-xs font-extrabold text-gray-900 mt-0.5 capitalize">
+              {todayLog?.mood || 'Log now'}
+            </span>
+          </div>
+
+          {/* Energy */}
+          <div className="p-3.5 rounded-3xl bg-amber-50/60 border border-amber-100 flex flex-col items-center justify-center">
+            <BatteryCharging className="w-4 h-4 text-amber-500 mb-1" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase">Energy</span>
+            <span className="text-xs font-extrabold text-gray-900 mt-0.5 capitalize">
+              {todayLog?.energy || 'Log now'}
+            </span>
+          </div>
+
+          {/* Symptoms */}
+          <div className="p-3.5 rounded-3xl bg-pink-50/60 border border-pink-100 flex flex-col items-center justify-center">
+            <Sparkles className="w-4 h-4 text-pink-500 mb-1" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase">Symptoms</span>
+            <span className="text-xs font-extrabold text-gray-900 mt-0.5 truncate max-w-full">
+              {todayLog?.symptoms?.length ? `${todayLog.symptoms.length} logged` : 'None'}
+            </span>
+          </div>
+
+          {/* Sleep */}
+          <div className="p-3.5 rounded-3xl bg-purple-50/60 border border-purple-100 flex flex-col items-center justify-center">
+            <Moon className="w-4 h-4 text-purple-500 mb-1" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase">Sleep</span>
+            <span className="text-xs font-extrabold text-gray-900 mt-0.5">
+              {todayLog?.sleep_hours ? `${todayLog.sleep_hours}h` : '7.5h'}
+            </span>
+          </div>
+
+          {/* Water */}
+          <div className="p-3.5 rounded-3xl bg-blue-50/60 border border-blue-100 flex flex-col items-center justify-center col-span-2 sm:col-span-1">
+            <Droplet className="w-4 h-4 text-blue-500 mb-1" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase">Water</span>
+            <span className="text-xs font-extrabold text-gray-900 mt-0.5">
+              {todayLog?.water_glasses ? `${todayLog.water_glasses} glasses` : '4 glasses'}
+            </span>
+          </div>
+        </div>
+
+        {/* Detailed Interactive Check-in */}
+        <div className="pt-2">
+          <TodayCheckIn />
+        </div>
+      </section>
+
+      {/* ======================================================== */}
+      {/* 5. PARTNER SHARING STATUS & QUICK ACCESS                 */}
+      {/* ======================================================== */}
+      <section className="bg-white rounded-4xl p-6 shadow-float border border-rose-100/80">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Partner Sharing</h3>
+              <span className="text-[10px] text-gray-400">Encrypted sync</span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigate('/woman/partner')}
+            className="text-xs text-rose-600 font-bold hover:underline flex items-center gap-1"
+          >
+            <span>Manage</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {isConnected && partnerLink ? (
+          <div className="p-3.5 bg-rose-50/60 rounded-3xl border border-rose-100 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold text-gray-900">
+                Connected with {partnerLink.partner_name || 'Alex'}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold text-rose-600">
+              {isPaused ? 'Paused' : 'Active Sync'}
+            </span>
+          </div>
+        ) : (
+          <div className="p-3.5 bg-gray-50 rounded-3xl border border-gray-100 flex items-center justify-between">
+            <span className="text-xs text-gray-600">No partner connected yet</span>
+            <button
+              onClick={() => navigate('/woman/partner')}
+              className="text-xs font-bold text-rose-600 hover:underline"
+            >
+              Generate Code →
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ======================================================== */}
+      {/* 6. FOUR PHASES OVERVIEW CAROUSEL                         */}
+      {/* ======================================================== */}
+      <section className="space-y-3 pt-2">
+        <h3 className="text-base font-bold font-display text-gray-900 px-1">
+          Cycle Phases Guidance
+        </h3>
         <PhaseCards currentPhase={cycleState.currentPhase} />
       </section>
     </div>

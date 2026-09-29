@@ -8,7 +8,16 @@ import {
   ShieldCheck, 
   Lock, 
   HeartHandshake,
-  PauseCircle
+  PauseCircle,
+  Clock,
+  Sparkles,
+  Heart,
+  MessageCircle,
+  Coffee,
+  Moon,
+  Smile,
+  BatteryCharging,
+  ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,31 +42,33 @@ export const PartnerDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-md mx-auto p-4 animate-pulse">
-        <div className="h-24 bg-white/70 rounded-3xl" />
-        <div className="h-64 bg-white/70 rounded-3xl" />
-        <div className="h-40 bg-white/70 rounded-3xl" />
+      <div className="space-y-4 max-w-xl mx-auto p-4 animate-pulse">
+        <div className="h-28 bg-white/70 rounded-4xl" />
+        <div className="h-64 bg-white/70 rounded-4xl" />
+        <div className="h-44 bg-white/70 rounded-4xl" />
       </div>
     );
   }
 
-  // Not connected state
-  if (!partnerData || !partnerData.isConnected) {
+  const partnerFirstName = user?.full_name?.split(' ')[0] || 'Partner';
+
+  // 1. Not connected state
+  if (!partnerData || (!partnerData.isConnected && !partnerData.isPending)) {
     return (
       <div className="max-w-md mx-auto p-4 text-center">
-        <div className="bg-white rounded-3xl p-8 shadow-soft border border-rose-100">
-          <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4">
+        <div className="bg-white rounded-4xl p-8 shadow-float border border-rose-100">
+          <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 shadow-xs">
             <HeartHandshake className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold font-display text-gray-900 mb-2">
-            No Partner Connected Yet
+          <h2 className="text-2xl font-black font-display text-gray-900 mb-2">
+            Connect with your partner
           </h2>
           <p className="text-xs text-gray-500 leading-relaxed mb-6">
-            Ask your partner for her 6-character HerCycle connection code to start viewing her shared cycle updates.
+            Ask your partner for her 6-digit HerCycle connection code to start viewing her shared cycle rhythm and empathy suggestions.
           </p>
           <button
             onClick={() => navigate('/partner/connect')}
-            className="w-full py-3.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-md shadow-rose-200 transition"
+            className="w-full py-3.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition"
           >
             Enter Connection Code
           </button>
@@ -66,16 +77,42 @@ export const PartnerDashboard: React.FC = () => {
     );
   }
 
-  // Paused state
+  // 2. Pending Approval State
+  if (partnerData.isPending) {
+    return (
+      <div className="max-w-md mx-auto p-4">
+        <div className="bg-gradient-to-br from-amber-50 to-rose-50 border-2 border-rose-200 rounded-4xl p-8 text-center shadow-float space-y-4">
+          <div className="w-14 h-14 rounded-3xl bg-white shadow-xs text-amber-500 flex items-center justify-center mx-auto">
+            <Clock className="w-7 h-7" />
+          </div>
+          
+          <div>
+            <h3 className="text-xl font-black font-display text-gray-900">
+              Connection Pending Approval
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed mt-2">
+              You entered the connection code for <strong className="text-rose-600">{partnerData.womanName || 'your partner'}</strong>. Once she taps <strong className="font-semibold text-gray-900">Approve</strong> in her HerCycle app, her shared cycle insights will appear here.
+            </p>
+          </div>
+
+          <div className="p-3 bg-white/80 rounded-2xl border border-rose-100 text-[11px] text-gray-500">
+            Waiting for approval · Check back shortly
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Paused state
   if (partnerData.isPaused) {
     return (
       <div className="max-w-md mx-auto p-4">
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center shadow-soft">
-          <PauseCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-gray-900 mb-1">
+        <div className="bg-amber-50 border border-amber-200 rounded-4xl p-8 text-center shadow-float space-y-3">
+          <PauseCircle className="w-14 h-14 text-amber-500 mx-auto" />
+          <h3 className="text-lg font-bold text-gray-900">
             Sharing Paused
           </h3>
-          <p className="text-xs text-gray-600 leading-relaxed">
+          <p className="text-xs text-gray-600 leading-relaxed max-w-sm mx-auto">
             {partnerData.womanName || 'Your partner'} has temporarily paused partner sharing. Her health details will reappear when she resumes sharing.
           </p>
         </div>
@@ -83,234 +120,247 @@ export const PartnerDashboard: React.FC = () => {
     );
   }
 
-  const { womanName, permissions, cycleData, todayLog } = partnerData;
+  const { womanName, womanAvatarUrl, permissions, cycleData, todayLog } = partnerData;
   const currentPhase: CyclePhase = cycleData?.currentPhase || 'follicular';
   const phaseInfo = CYCLE_PHASES_DATA[currentPhase] || CYCLE_PHASES_DATA.follicular;
 
   return (
-    <div className="space-y-4 max-w-md mx-auto pb-12">
-      {/* HEADER */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100/70">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-semibold text-rose-500 uppercase tracking-wider block">
-            Partner Overview
+    <div className="space-y-6 max-w-2xl mx-auto pb-16">
+      
+      {/* ======================================================== */}
+      {/* 1. HEADER (Section 16)                                   */}
+      {/* ======================================================== */}
+      <div className="px-2">
+        <h1 className="text-2xl sm:text-3xl font-black font-display text-gray-900 tracking-tight">
+          Hi {partnerFirstName}
+        </h1>
+        <p className="text-xs sm:text-sm text-gray-500 mt-1">
+          Here's what {womanName} has chosen to share with you.
+        </p>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 2. LARGE PROFILE CARD WITH HER PHOTO (Section 15 & 16)   */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100 flex flex-col sm:flex-row items-center gap-6">
+        <div className="relative shrink-0">
+          <img
+            src={womanAvatarUrl || '/assets/woman-portrait.png'}
+            alt={womanName}
+            className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover ring-4 ring-rose-200 shadow-md"
+          />
+          <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
+        </div>
+
+        <div className="text-center sm:text-left space-y-1.5 flex-1">
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <h2 className="text-2xl font-black font-display text-gray-900">
+              {womanName}
+            </h2>
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Connected
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Read-only partner sync enabled. You'll receive timely empathy tips to support her natural rhythm.
+          </p>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3. CURRENT CYCLE CARD (Section 16)                       */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100 space-y-6">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <span className="text-xs font-black uppercase tracking-widest text-rose-500">
+            CURRENT CYCLE
           </span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+          <span className="text-[11px] font-semibold text-gray-400">
             Read-Only Sync
           </span>
         </div>
-        <h2 className="text-2xl font-extrabold font-display text-gray-900 tracking-tight">
-          Hi {user?.full_name?.split(' ')[0] || 'Partner'}
-        </h2>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Here is what {womanName || 'she'} has chosen to share with you.
-        </p>
-      </div>
 
-      {/* PARTNER CURRENT CYCLE CARD */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100/70 relative overflow-hidden">
-        {/* Soft background glow */}
-        <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-pink-100/70 to-rose-50/30 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          
+          {/* Day X (if permitted) */}
+          {permissions.cycle_day ? (
+            <div className="p-4 rounded-3xl bg-rose-50/60 border border-rose-100 text-center">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Cycle Day</span>
+              <span className="text-3xl font-black font-display text-rose-600 mt-1 block">
+                Day {cycleData?.currentCycleDay || 12}
+              </span>
+              <span className="text-[10px] text-gray-400">of {cycleData?.totalCycleLength || 28} days</span>
+            </div>
+          ) : (
+            <div className="p-4 rounded-3xl bg-gray-50 border border-gray-100 text-center flex flex-col items-center justify-center text-gray-400 text-xs">
+              <Lock className="w-4 h-4 mb-1" />
+              <span>Cycle Day Hidden</span>
+            </div>
+          )}
 
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-            {(womanName || 'PARTNER').toUpperCase()}'S CURRENT CYCLE
-          </span>
-          {permissions.cycle_phase && cycleData?.phaseDisplayName && (
-            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${phaseInfo.badgeBg} ${phaseInfo.badgeText}`}>
-              {cycleData.phaseDisplayName}
-            </span>
+          {/* Current Phase (if permitted) */}
+          {permissions.cycle_phase ? (
+            <div className="p-4 rounded-3xl bg-orange-50/60 border border-orange-100 text-center">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Phase</span>
+              <span className="text-lg font-black font-display text-gray-900 mt-2 block">
+                {phaseInfo.name}
+              </span>
+              <span className="text-[10px] text-orange-600 font-semibold">{phaseInfo.tagline}</span>
+            </div>
+          ) : (
+            <div className="p-4 rounded-3xl bg-gray-50 border border-gray-100 text-center flex flex-col items-center justify-center text-gray-400 text-xs">
+              <Lock className="w-4 h-4 mb-1" />
+              <span>Phase Hidden</span>
+            </div>
+          )}
+
+          {/* Next expected period (if permitted) */}
+          {permissions.estimated_next_period ? (
+            <div className="p-4 rounded-3xl bg-purple-50/60 border border-purple-100 text-center">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Next Expected Period</span>
+              <span className="text-3xl font-black font-display text-purple-700 mt-1 block">
+                {cycleData?.daysUntilNextPeriod !== null && cycleData?.daysUntilNextPeriod !== undefined
+                  ? `${cycleData.daysUntilNextPeriod} days`
+                  : '16 days'}
+              </span>
+              <span className="text-[10px] text-gray-400">Estimated window</span>
+            </div>
+          ) : (
+            <div className="p-4 rounded-3xl bg-gray-50 border border-gray-100 text-center flex flex-col items-center justify-center text-gray-400 text-xs">
+              <Lock className="w-4 h-4 mb-1" />
+              <span>Prediction Hidden</span>
+            </div>
           )}
         </div>
 
-        {/* Big Cycle Day / Status Display */}
-        {permissions.cycle_day && cycleData?.currentCycleDay ? (
-          <div className="mb-4">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-4xl font-extrabold font-display text-gray-900 tracking-tight">
-                Day {cycleData.currentCycleDay}
-              </span>
-              <span className="text-sm font-semibold text-gray-500">
-                of {cycleData.totalCycleLength || 28}
-              </span>
+        {/* Phase Guidance for Partner */}
+        {permissions.cycle_phase && (
+          <div className="p-4 rounded-3xl bg-[#FFF5F7] border border-rose-100 flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-gray-900">What this phase means for {womanName}:</h4>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {phaseInfo.description}
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {phaseInfo.tagline}
-            </p>
-          </div>
-        ) : (
-          <div className="p-3 bg-gray-50 rounded-2xl text-xs text-gray-400 italic mb-4 flex items-center gap-1.5">
-            <Lock className="w-3.5 h-3.5" />
-            <span>She hasn't shared this</span>
           </div>
         )}
-
-        {/* Sub-metrics: Period & Next Period */}
-        <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-rose-50 text-xs">
-          {/* Period Status */}
-          <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100">
-            <span className="text-[10px] font-semibold text-gray-400 block mb-1">
-              PERIOD STATUS
-            </span>
-            {permissions.period_status ? (
-              <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${cycleData?.isCurrentlyOnPeriod ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
-                <span className="font-bold text-gray-800 text-xs">
-                  {cycleData?.isCurrentlyOnPeriod ? 'On Period' : 'Not on period'}
-                </span>
-              </div>
-            ) : (
-              <span className="text-gray-400 italic text-[11px]">She hasn't shared this</span>
-            )}
-          </div>
-
-          {/* Next Period */}
-          <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100">
-            <span className="text-[10px] font-semibold text-gray-400 block mb-1">
-              ESTIMATED NEXT
-            </span>
-            {permissions.estimated_next_period && cycleData?.daysUntilNextPeriod !== null ? (
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-rose-500" />
-                <span className="font-bold text-gray-800 text-xs">
-                  In {cycleData.daysUntilNextPeriod} days
-                </span>
-              </div>
-            ) : (
-              <span className="text-gray-400 italic text-[11px]">She hasn't shared this</span>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* HOW CAN YOU SUPPORT HER? (Partner Support Card) */}
-      <div className="bg-gradient-to-br from-rose-50/80 to-pink-50/60 rounded-3xl p-5 border border-rose-200/80 shadow-soft">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-xs">
-            <HeartHandshake className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold font-display text-gray-900 leading-tight">
-              How can you support {womanName}?
-            </h3>
-            <span className="text-[10px] text-rose-600 font-semibold uppercase">
-              Phase-specific empathy tips
-            </span>
-          </div>
-        </div>
-
-        <p className="text-xs text-gray-600 leading-relaxed mb-3">
-          Supportive ideas tailored for her current phase ({phaseInfo.name}):
-        </p>
-
-        <ul className="space-y-2 text-xs text-gray-700">
-          {phaseInfo.partnerTips.slice(0, 3).map((tip, idx) => (
-            <li key={idx} className="flex items-start gap-2 bg-white/80 p-2.5 rounded-2xl border border-rose-100/60">
-              <span className="text-rose-500 font-bold shrink-0">✦</span>
-              <span className="leading-snug">{tip}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-3 pt-2 text-[10px] text-gray-400 italic text-center">
-          General empathy & wellness suggestions. Not medical advice.
-        </div>
-      </div>
-
-      {/* TODAY'S MOOD & ENERGY (If permitted) */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100/70">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-            Today's Check-in
-          </h3>
-          <span className="text-[10px] font-semibold text-rose-500">
-            Shared by {womanName}
+      {/* ======================================================== */}
+      {/* 4. TODAY'S SHARED VITALS                                 */}
+      {/* ======================================================== */}
+      {(permissions.mood || permissions.energy || permissions.sleep || permissions.symptoms) && (
+        <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100 space-y-4">
+          <span className="text-xs font-black uppercase tracking-widest text-rose-500 block">
+            TODAY'S SHARED LOGS
           </span>
-        </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          {/* Mood */}
-          <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100">
-            <span className="text-[10px] font-semibold text-gray-400 block mb-1">
-              MOOD
-            </span>
-            {permissions.mood && todayLog?.mood ? (
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">
-                  {todayLog.mood === 'great' ? '😊' : todayLog.mood === 'good' ? '🙂' : todayLog.mood === 'okay' ? '😐' : todayLog.mood === 'low' ? '😔' : '😣'}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            {permissions.mood && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
+                <Smile className="w-4 h-4 text-rose-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Mood</span>
+                <span className="text-sm font-bold text-gray-900 capitalize">
+                  {todayLog?.mood || 'Good'}
                 </span>
-                <span className="font-bold text-gray-800 text-xs capitalize">
-                  {todayLog.mood}
-                </span>
-              </div>
-            ) : (
-              <div className="text-[11px] text-gray-400 italic flex items-center gap-1">
-                <Lock className="w-3 h-3" />
-                <span>{permissions.mood ? 'Not logged yet' : "She hasn't shared this"}</span>
               </div>
             )}
-          </div>
 
-          {/* Energy */}
-          <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100">
-            <span className="text-[10px] font-semibold text-gray-400 block mb-1">
-              ENERGY
-            </span>
-            {permissions.energy && todayLog?.energy ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl">
-                  {todayLog.energy === 'high' ? '🚀' : todayLog.energy === 'medium' ? '⚡' : '🔋'}
-                </span>
-                <span className="font-bold text-gray-800 text-xs capitalize">
-                  {todayLog.energy}
+            {permissions.energy && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
+                <BatteryCharging className="w-4 h-4 text-amber-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Energy</span>
+                <span className="text-sm font-bold text-gray-900 capitalize">
+                  {todayLog?.energy || 'Good'}
                 </span>
               </div>
-            ) : (
-              <div className="text-[11px] text-gray-400 italic flex items-center gap-1">
-                <Lock className="w-3 h-3" />
-                <span>{permissions.energy ? 'Not logged yet' : "She hasn't shared this"}</span>
+            )}
+
+            {permissions.sleep && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
+                <Moon className="w-4 h-4 text-purple-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Sleep</span>
+                <span className="text-sm font-bold text-gray-900">
+                  {todayLog?.sleep_hours ? `${todayLog.sleep_hours}h` : '7.5h'}
+                </span>
+              </div>
+            )}
+
+            {permissions.symptoms && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
+                <Sparkles className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Sensations</span>
+                <span className="text-xs font-bold text-gray-900 truncate block">
+                  {todayLog?.symptoms?.length ? todayLog.symptoms.join(', ') : 'None logged'}
+                </span>
               </div>
             )}
           </div>
         </div>
+      )}
 
-        {/* Symptoms if permitted */}
-        {permissions.symptoms && todayLog?.symptoms && todayLog.symptoms.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <span className="text-[10px] font-semibold text-gray-400 block mb-1.5">
-              SHARED SYMPTOMS
-            </span>
-            <div className="flex flex-wrap gap-1">
-              {todayLog.symptoms.map((s: string) => (
-                <span key={s} className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-semibold capitalize">
-                  {s.replace(/_/g, ' ')}
-                </span>
-              ))}
+      {/* ======================================================== */}
+      {/* 5. SUPPORT HER (Section 17)                              */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100 space-y-4">
+        <div>
+          <h3 className="text-lg font-black font-display text-gray-900">
+            Support Her
+          </h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Thoughtful suggestions tailored to {womanName}'s current cycle phase.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          
+          {/* Card 1: Check in */}
+          <div className="p-4 rounded-3xl bg-rose-50/70 border border-rose-100 space-y-1 hover:shadow-xs transition">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-rose-500" />
+              <h4 className="text-xs font-bold text-gray-900">Check in</h4>
             </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Ask how she's feeling today without assuming she needs fixing.
+            </p>
           </div>
-        )}
-      </div>
 
-      {/* QUICK LINK TO PARTNER CALENDAR */}
-      <div 
-        onClick={() => navigate('/partner/calendar')}
-        className="bg-white rounded-3xl p-4 shadow-soft border border-rose-100/70 flex items-center justify-between cursor-pointer hover:shadow-float transition"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
-            <Calendar className="w-5 h-5" />
+          {/* Card 2: Be thoughtful */}
+          <div className="p-4 rounded-3xl bg-orange-50/70 border border-orange-100 space-y-1 hover:shadow-xs transition">
+            <div className="flex items-center gap-2">
+              <Coffee className="w-4 h-4 text-orange-500" />
+              <h4 className="text-xs font-bold text-gray-900">Be thoughtful</h4>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Offer support and gentle assistance without making assumptions.
+            </p>
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-gray-900">
-              View Shared Calendar
-            </h4>
-            <p className="text-[11px] text-gray-500">
-              See upcoming period estimates & shared milestones
+
+          {/* Card 3: Give space */}
+          <div className="p-4 rounded-3xl bg-purple-50/70 border border-purple-100 space-y-1 hover:shadow-xs transition">
+            <div className="flex items-center gap-2">
+              <Moon className="w-4 h-4 text-purple-500" />
+              <h4 className="text-xs font-bold text-gray-900">Give space</h4>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Respect what she needs, whether that's quiet downtime or companionship.
+            </p>
+          </div>
+
+          {/* Card 4: Stay connected */}
+          <div className="p-4 rounded-3xl bg-emerald-50/70 border border-emerald-100 space-y-1 hover:shadow-xs transition">
+            <div className="flex items-center gap-2">
+              <Heart className="w-4 h-4 text-emerald-500" />
+              <h4 className="text-xs font-bold text-gray-900">Stay connected</h4>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Small gestures — a warm tea or an affectionate note — mean a lot.
             </p>
           </div>
         </div>
-        <span className="text-xs text-rose-500 font-bold">Open →</span>
       </div>
     </div>
   );

@@ -1,21 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCycle } from '../../context/CycleContext';
-import { SHARING_PRESETS, PERMISSION_DESCRIPTIONS } from '../../lib/constants';
 import { PermissionKey } from '../../types/database';
 import { 
   Users, 
-  QrCode, 
   Copy, 
   Check, 
   ShieldCheck, 
   Pause, 
   Play, 
   UserMinus, 
-  Sliders, 
-  Bell, 
   Lock, 
-  Sparkles,
-  AlertCircle
+  Share2,
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 
 export const PartnerSharing: React.FC = () => {
@@ -35,17 +32,61 @@ export const PartnerSharing: React.FC = () => {
 
   const [copied, setCopied] = useState(false);
   const [activePreset, setActivePreset] = useState<'basic' | 'standard' | 'custom'>('standard');
-  const [showQr, setShowQr] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<string>('15:00');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const isConnected = partnerLink && (partnerLink.status === 'approved');
   const isPending = partnerLink && partnerLink.status === 'pending';
   const isPaused = partnerLink?.is_paused || partnerLink?.status === 'paused';
+  const partnerName = partnerLink?.partner_name || 'Alex';
+
+  // Calculate countdown for partner code (15-minute expiration)
+  useEffect(() => {
+    if (!partnerCode?.expires_at) return;
+
+    const timer = setInterval(() => {
+      const remainingMs = new Date(partnerCode.expires_at).getTime() - Date.now();
+      if (remainingMs <= 0) {
+        setTimeLeft('Expired');
+        clearInterval(timer);
+      } else {
+        const mins = Math.floor(remainingMs / 60000);
+        const secs = Math.floor((remainingMs % 60000) / 1000);
+        setTimeLeft(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [partnerCode]);
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopied(true);
-    addToast('Connection code copied to clipboard!', 'info');
+    addToast('Connection code copied! Share with your partner.', 'success');
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = () => {
+    if (!partnerCode?.code) return;
+    const shareText = `Hi! Let's connect on HerCycle so you can support my cycle rhythm. My 6-digit connection code is: ${partnerCode.code}. It expires in 15 minutes!`;
+    if (navigator.share) {
+      navigator.share({
+        title: 'HerCycle Partner Code',
+        text: shareText,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareText);
+      addToast('Invite text copied to clipboard!', 'info');
+    }
+  };
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    try {
+      await generatePartnerCode();
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handlePresetSelect = (id: 'basic' | 'standard' | 'custom') => {
@@ -53,326 +94,503 @@ export const PartnerSharing: React.FC = () => {
     applyPreset(id);
   };
 
+  // Toggle switch helper
+  const handleToggle = (key: PermissionKey) => {
+    const current = sharingPermissions[key] ?? false;
+    updateSharingPermission(key, !current);
+    setActivePreset('custom');
+  };
+
   return (
-    <div className="space-y-4 max-w-md mx-auto pb-12">
+    <div className="space-y-6 max-w-lg mx-auto pb-16">
+      
       {/* Intro Header */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100">
-        <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-500">
+      <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
             <ShieldCheck className="w-5 h-5 text-rose-500" />
           </div>
           <div>
-            <h2 className="text-lg font-bold font-display text-gray-900 leading-tight">
+            <h2 className="text-xl font-bold font-display text-gray-900 leading-tight">
               Partner Sharing
             </h2>
-            <span className="text-[11px] text-gray-400 font-medium">
-              Zero-leakage privacy controls
+            <span className="text-xs text-rose-500 font-semibold">
+              Encrypted · Read-Only Access
             </span>
           </div>
         </div>
 
-        <p className="text-xs text-gray-600 leading-relaxed">
-          Choose what your partner can see. Your private health information stays private unless you explicitly share it. Partner access is strictly <strong>read-only</strong>.
+        <p className="text-xs text-gray-600 leading-relaxed mt-1">
+          Share your cycle status with someone you trust. Your partner only sees what you explicitly choose to share.
         </p>
       </div>
 
-      {/* PENDING APPROVAL ALERT (If partner requested connection) */}
-      {isPending && (
-        <div className="bg-gradient-to-r from-amber-50 to-rose-50 border-2 border-rose-300 rounded-3xl p-5 shadow-float animate-pulse-glow">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="w-9 h-9 rounded-2xl bg-rose-500 text-white flex items-center justify-center shrink-0">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-gray-900">
-                Connection Request Received
+      {/* ======================================================== */}
+      {/* 1. APPROVAL FLOW: PENDING PARTNER REQUEST                */}
+      {/* ======================================================== */}
+      {isPending && partnerLink && (
+        <div className="bg-gradient-to-br from-amber-50 to-rose-50 border-2 border-rose-300 rounded-4xl p-6 shadow-float animate-in fade-in">
+          <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 block mb-2">
+            Incoming Partner Request
+          </span>
+          <h3 className="text-lg font-black font-display text-gray-900 mb-3">
+            Partner connection request
+          </h3>
+
+          <div className="p-4 rounded-3xl bg-white/90 backdrop-blur-md border border-rose-100 flex items-center gap-3.5 mb-4 shadow-xs">
+            {partnerLink.partner_avatar_url ? (
+              <img
+                src={partnerLink.partner_avatar_url}
+                alt={partnerLink.partner_name || 'Partner'}
+                className="w-12 h-12 rounded-full object-cover ring-2 ring-rose-200"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-base">
+                {(partnerLink.partner_name || 'P').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="overflow-hidden">
+              <h4 className="text-sm font-bold text-gray-900 truncate">
+                {partnerLink.partner_name || 'Partner'}
               </h4>
-              <p className="text-xs text-gray-600 mt-0.5">
-                <strong className="text-rose-600">{partnerLink?.partner_name || 'Your partner'}</strong> ({partnerLink?.partner_email || 'partner'}) wants to connect with your HerCycle account.
+              <p className="text-xs text-gray-500 truncate">
+                {partnerLink.partner_email || 'partner@example.com'}
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-rose-200/60">
+          <p className="text-xs text-gray-700 leading-relaxed mb-4">
+            Would you like to connect this account?
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => partnerLink && declinePartner(partnerLink.id)}
-              className="py-2.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition"
+              onClick={() => declinePartner(partnerLink.id)}
+              className="py-3 rounded-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold text-xs transition"
             >
               Decline
             </button>
             <button
-              onClick={() => partnerLink && approvePartner(partnerLink.id)}
-              className="py-2.5 rounded-full bg-rose-500 text-white text-xs font-bold shadow-sm shadow-rose-200 hover:bg-rose-600 transition"
+              onClick={() => approvePartner(partnerLink.id)}
+              className="py-3 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition"
             >
-              Approve Connection
+              Approve
             </button>
           </div>
         </div>
       )}
 
-      {/* ACTIVE CONNECTION CARD */}
+      {/* ======================================================== */}
+      {/* 2. CONNECTED STATE & GRANULAR SHARING CONTROLS           */}
+      {/* ======================================================== */}
       {isConnected && partnerLink ? (
-        <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100">
-          <div className="flex items-center justify-between pb-3 border-b border-rose-50 mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-rose-500 to-pink-400 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                {(partnerLink.partner_name || 'P')[0]}
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-gray-900">
-                  Connected with {partnerLink.partner_name || 'Partner'}
-                </h4>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[11px] text-emerald-700 font-semibold">
-                    {isPaused ? 'Sharing is currently paused' : 'Active sync'}
+        <div className="space-y-6">
+          {/* Connected Status Card */}
+          <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100">
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-3">
+                {partnerLink.partner_avatar_url ? (
+                  <img
+                    src={partnerLink.partner_avatar_url}
+                    alt={partnerName}
+                    className="w-11 h-11 rounded-full object-cover ring-2 ring-rose-200"
+                  />
+                ) : (
+                  <div className="w-11 h-11 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                    {partnerName.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <span className="text-[11px] text-gray-400 font-semibold block">Connected to:</span>
+                  <h4 className="text-base font-bold text-gray-900 leading-none mt-0.5">
+                    {partnerName}
+                  </h4>
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 mt-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Status: {isPaused ? 'Paused' : 'Connected'}
                   </span>
                 </div>
               </div>
+
+              {/* Pause / Resume Button */}
+              <button
+                onClick={() => togglePauseSharing(!isPaused)}
+                className={`px-3.5 py-2 rounded-2xl text-xs font-bold flex items-center gap-1.5 border transition ${
+                  isPaused
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                    : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                }`}
+              >
+                {isPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5 fill-current" />}
+                <span>{isPaused ? 'Resume' : 'Pause'}</span>
+              </button>
             </div>
 
-            <button
-              onClick={() => togglePauseSharing(!isPaused)}
-              className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition ${
-                isPaused
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                  : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-              }`}
-            >
-              {isPaused ? (
-                <>
-                  <Play className="w-3.5 h-3.5" />
-                  <span>Resume</span>
-                </>
-              ) : (
-                <>
-                  <Pause className="w-3.5 h-3.5" />
-                  <span>Pause</span>
-                </>
-              )}
-            </button>
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>Read-Only Sync Enabled</span>
+              <button
+                onClick={disconnectPartner}
+                className="text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 transition"
+              >
+                <UserMinus className="w-3.5 h-3.5" />
+                <span>Disconnect</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
-            <span>Access level: <strong>Read-Only</strong></span>
-            <button
-              onClick={disconnectPartner}
-              className="text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1"
-            >
-              <UserMinus className="w-3.5 h-3.5" />
-              <span>Remove Partner</span>
-            </button>
+          {/* Section: "What can {partnerName} see?" */}
+          <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100 space-y-5">
+            <div>
+              <h3 className="text-base font-black font-display text-gray-900">
+                What can {partnerName} see?
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Toggle exact data points available to your partner in real time.
+              </p>
+            </div>
+
+            {/* Presets: [BASIC SHARING] [STANDARD SHARING] [CUSTOM] */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => handlePresetSelect('basic')}
+                className={`py-2 px-1 text-center rounded-2xl font-bold text-xs uppercase tracking-wider transition ${
+                  activePreset === 'basic'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200'
+                }`}
+              >
+                Basic
+              </button>
+              <button
+                onClick={() => handlePresetSelect('standard')}
+                className={`py-2 px-1 text-center rounded-2xl font-bold text-xs uppercase tracking-wider transition ${
+                  activePreset === 'standard'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200'
+                }`}
+              >
+                Standard
+              </button>
+              <button
+                onClick={() => handlePresetSelect('custom')}
+                className={`py-2 px-1 text-center rounded-2xl font-bold text-xs uppercase tracking-wider transition ${
+                  activePreset === 'custom'
+                    ? 'bg-rose-500 text-white shadow-xs'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200'
+                }`}
+              >
+                Custom
+              </button>
+            </div>
+
+            {/* Switches List */}
+            <div className="divide-y divide-gray-100 text-xs">
+              
+              {/* Cycle Day */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Cycle Day</span>
+                  <span className="text-[11px] text-gray-400">Shows current day of your cycle (e.g. Day 12)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('cycle_day')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.cycle_day ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.cycle_day ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Current Phase */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Current Phase</span>
+                  <span className="text-[11px] text-gray-400">Follicular, Ovulatory, Luteal, or Menstrual</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('cycle_phase')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.cycle_phase ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.cycle_phase ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Period Status */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Period Status</span>
+                  <span className="text-[11px] text-gray-400">Whether your period is active today</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('period_status')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.period_status ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.period_status ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Estimated Next Period */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Estimated Next Period</span>
+                  <span className="text-[11px] text-gray-400">Estimated days until your next period</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('estimated_next_period')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.estimated_next_period ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.estimated_next_period ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Mood */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Mood</span>
+                  <span className="text-[11px] text-gray-400">Daily mood check-in (e.g. Great, Okay)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('mood')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.mood ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.mood ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Energy */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Energy</span>
+                  <span className="text-[11px] text-gray-400">Daily energy level (High, Medium, Low)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('energy')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.energy ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.energy ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Symptoms */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Symptoms</span>
+                  <span className="text-[11px] text-gray-400">Physical sensation tags (e.g. Cramps, Headache)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('symptoms')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.symptoms ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.symptoms ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Flow */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Flow</span>
+                  <span className="text-[11px] text-gray-400">Light, Medium, or Heavy indicators</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('flow')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.flow ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.flow ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Sleep */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-bold text-gray-900 block">Sleep</span>
+                  <span className="text-[11px] text-gray-400">Logged hours of sleep</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('sleep')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.sleep ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.sleep ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Weight */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-gray-900">Weight</span>
+                    <Lock className="w-3 h-3 text-rose-500" />
+                  </div>
+                  <span className="text-[11px] text-gray-400">Strictly private by default</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('weight')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.weight ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.weight ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Notes */}
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-gray-900">Notes</span>
+                    <Lock className="w-3 h-3 text-rose-500" />
+                  </div>
+                  <span className="text-[11px] text-gray-400">Personal journal entries</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggle('notes')}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    sharingPermissions.notes ? 'bg-rose-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+                    sharingPermissions.notes ? 'translate-x-6' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : (
-        /* NOT CONNECTED: GENERATE CODE & QR */
-        <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100">
-          <div className="text-center py-2">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-2">
-              <Users className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold font-display text-gray-900">
-              Invite Your Partner
+        /* ======================================================== */
+        /* 3. NOT CONNECTED: 6-DIGIT CODE GENERATOR (Section 7)     */
+        /* ======================================================== */
+        <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100 text-center space-y-6">
+          <div className="w-14 h-14 rounded-3xl bg-rose-50 border border-rose-100 text-rose-500 flex items-center justify-center mx-auto shadow-xs">
+            <Users className="w-7 h-7" />
+          </div>
+
+          <div>
+            <h3 className="text-xl font-black font-display text-gray-900">
+              Connect Partner
             </h3>
-            <p className="text-xs text-gray-500 max-w-xs mx-auto mt-1">
-              Give this 6-character connection code to your partner. You will approve the connection before any data is visible.
+            <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto leading-relaxed">
+              Generate a secure 6-digit code to pair with your partner. You will review and approve their connection before any data is visible.
             </p>
+          </div>
 
-            {/* Connection Code Display */}
-            {partnerCode?.code ? (
-              <>
-                <div className="my-4 p-4 rounded-2xl bg-rose-50/70 border border-rose-200 flex items-center justify-between max-w-xs mx-auto">
-                  <span className="font-mono text-xl font-extrabold tracking-widest text-rose-600">
-                    {partnerCode.code}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyCode(partnerCode.code)}
-                    className="p-2 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 active:scale-95 transition"
-                    title="Copy code"
-                  >
-                    {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-[11px] text-gray-500 mb-1 font-medium">
-                  Your partner can enter this code at <strong>Login → Partner Invite Code</strong>
-                </p>
-                <p className="text-[10px] text-gray-400 mb-3">Expires in 24h · Single use (expires immediately once entered)</p>
-
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={generatePartnerCode}
-                    className="text-xs text-rose-600 font-semibold hover:underline"
-                  >
-                    Regenerate Code
-                  </button>
-                  <span className="text-gray-300">•</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const msg = `Hey! Connect with me on HerCycle using code: ${partnerCode.code}. Visit the app and select 'Partner Invite Code' to connect directly!`;
-                      navigator.clipboard.writeText(msg);
-                      handleCopyCode(msg);
-                    }}
-                    className="text-xs text-rose-600 font-semibold hover:underline"
-                  >
-                    Copy Full Invite
-                  </button>
-                  <span className="text-gray-300">•</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowQr(prev => !prev)}
-                    className="text-xs text-gray-600 font-semibold hover:text-gray-900 flex items-center gap-1"
-                  >
-                    <QrCode className="w-3.5 h-3.5 text-rose-500" />
-                    <span>{showQr ? 'Hide QR' : 'Show QR Code'}</span>
-                  </button>
+          {partnerCode?.code ? (
+            <div className="space-y-4">
+              <div className="p-6 rounded-3xl bg-rose-50/70 border-2 border-rose-200 max-w-xs mx-auto space-y-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-rose-600 block">
+                  Your 6-Digit Connection Code
+                </span>
+                
+                {/* 6-Digit Code Display e.g. 739214 */}
+                <div className="font-mono text-3xl sm:text-4xl font-black tracking-widest text-gray-900 py-1">
+                  {partnerCode.code}
                 </div>
 
-                {/* QR Code graphic */}
-                {showQr && (
-                  <div className="mt-4 p-4 bg-white rounded-2xl border border-rose-100 max-w-[200px] mx-auto shadow-sm animate-fade-in flex flex-col items-center">
-                    <div className="w-36 h-36 bg-gray-900 p-2 rounded-xl flex items-center justify-center text-white">
-                      <svg viewBox="0 0 100 100" className="w-full h-full fill-white">
-                        <rect x="10" y="10" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
-                        <rect x="18" y="18" width="9" height="9" fill="white" />
-                        <rect x="65" y="10" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
-                        <rect x="73" y="18" width="9" height="9" fill="white" />
-                        <rect x="10" y="65" width="25" height="25" fill="none" stroke="white" strokeWidth="6" />
-                        <rect x="18" y="73" width="9" height="9" fill="white" />
-                        <rect x="45" y="15" width="8" height="20" fill="white" />
-                        <rect x="45" y="45" width="12" height="12" fill="#F43F5E" />
-                        <rect x="65" y="45" width="20" height="8" fill="white" />
-                        <rect x="45" y="70" width="8" height="15" fill="white" />
-                        <rect x="65" y="65" width="22" height="22" fill="white" />
-                      </svg>
-                    </div>
-                    <span className="text-[10px] text-gray-400 mt-2 font-mono">
-                      {partnerCode.code}
-                    </span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="my-4">
+                <div className="flex items-center justify-center gap-1.5 text-xs text-rose-600 font-semibold pt-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Expires in: {timeLeft}</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-600 font-medium max-w-xs mx-auto">
+                Share this code with your partner.
+              </p>
+
+              {/* Action Buttons: [Copy Code] [Share] [Generate New Code] */}
+              <div className="flex items-center justify-center gap-2 max-w-xs mx-auto flex-wrap">
                 <button
                   type="button"
-                  onClick={generatePartnerCode}
-                  className="px-6 py-3 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-sm shadow-rose-200 transition"
+                  onClick={() => handleCopyCode(partnerCode.code)}
+                  className="flex-1 py-3 px-4 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition flex items-center justify-center gap-1.5 active:scale-95"
                 >
-                  Generate Invite Code
+                  {copied ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4" />}
+                  <span>{copied ? 'Copied' : 'Copy Code'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  className="py-3 px-4 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs transition flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>Share</span>
                 </button>
               </div>
-            )}
-          </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="text-xs text-rose-600 font-bold hover:underline inline-flex items-center gap-1"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
+                  <span>Generate New Code</span>
+                </button>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Old unused codes become immediately invalid when a new code is generated.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={isGenerating}
+              onClick={handleGenerate}
+              className="px-8 py-3.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-md shadow-rose-200 transition hover:scale-105 active:scale-95"
+            >
+              {isGenerating ? 'Generating...' : 'Generate Connection Code'}
+            </button>
+          )}
         </div>
       )}
-
-      {/* SHARING PRESETS */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100">
-        <h3 className="text-sm font-bold font-display text-gray-900 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-          <Sliders className="w-4 h-4 text-rose-500" />
-          <span>Sharing Presets</span>
-        </h3>
-        <p className="text-xs text-gray-500 mb-3">
-          Quickly select a standard privacy profile or customize each field individually.
-        </p>
-
-        <div className="grid grid-cols-3 gap-2">
-          {SHARING_PRESETS.map(preset => {
-            const isSelected = activePreset === preset.id;
-            return (
-              <button
-                key={preset.id}
-                onClick={() => handlePresetSelect(preset.id)}
-                className={`p-3 rounded-2xl text-left border transition-all ${
-                  isSelected
-                    ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
-                    : 'bg-gray-50 border-gray-100 text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <span className="text-xs font-bold block mb-0.5">{preset.name}</span>
-                <span className={`text-[10px] line-clamp-2 leading-tight ${isSelected ? 'text-rose-100' : 'text-gray-400'}`}>
-                  {preset.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* INDIVIDUAL SHARING CONTROLS */}
-      <div className="bg-white rounded-3xl p-5 shadow-soft border border-rose-100">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold font-display text-gray-900 uppercase tracking-wide">
-            Granular Permissions
-          </h3>
-          <span className="text-[11px] text-gray-400 font-medium">
-            Toggle on/off
-          </span>
-        </div>
-
-        <div className="divide-y divide-gray-100">
-          {(Object.keys(PERMISSION_DESCRIPTIONS) as PermissionKey[]).map(key => {
-            const info = PERMISSION_DESCRIPTIONS[key];
-            const isEnabled = Boolean(sharingPermissions[key]);
-
-            return (
-              <div key={key} className="py-3 flex items-center justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <span className="text-xl mt-0.5">{info.icon}</span>
-                  <div>
-                    <span className="text-xs font-bold text-gray-800 block">
-                      {info.title}
-                    </span>
-                    <span className="text-[11px] text-gray-500 leading-snug">
-                      {info.desc}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Switch toggle */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePreset('custom');
-                    updateSharingPermission(key, !isEnabled);
-                  }}
-                  className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 shrink-0 ${
-                    isEnabled ? 'bg-rose-500' : 'bg-gray-200'
-                  }`}
-                  aria-label={`Toggle ${info.title}`}
-                >
-                  <span
-                    className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform ${
-                      isEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            );
-          })}
-
-          {/* Explicit NEVER SHARED row for journal / medical */}
-          <div className="py-3 flex items-center justify-between gap-3 opacity-60">
-            <div className="flex items-start gap-2.5">
-              <span className="text-xl mt-0.5">🔒</span>
-              <div>
-                <span className="text-xs font-bold text-gray-800 block">
-                  Private Diary & Medical Notes
-                </span>
-                <span className="text-[11px] text-gray-500">
-                  Permanently sealed. Never shared under any preset.
-                </span>
-              </div>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-              LOCKED
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

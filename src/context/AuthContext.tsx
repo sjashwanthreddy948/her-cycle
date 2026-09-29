@@ -23,6 +23,7 @@ interface AuthContextType {
     fullName: string;
     role: UserRole;
     age?: number;
+    avatarUrl?: string;
     cycleLength?: number;
     periodLength?: number;
     lastPeriodStart?: string;
@@ -30,6 +31,8 @@ interface AuthContextType {
   }) => Promise<UserProfile>;
   logout: (reason?: string) => Promise<void>;
   updateCurrentUserProfile: (updates: Partial<UserProfile>) => Promise<UserProfile>;
+  changePassword: (currentPass: string, newPass: string) => Promise<void>;
+  resetPasswordEmail: (email: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -263,6 +266,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fullName: string;
     role: UserRole;
     age?: number;
+    avatarUrl?: string;
     cycleLength?: number;
     periodLength?: number;
     lastPeriodStart?: string;
@@ -311,7 +315,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               full_name: params.fullName.trim(),
               role: params.role,
               age: params.age,
-              avatar_url: undefined,
+              avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : undefined),
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             };
@@ -371,7 +375,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         full_name: params.fullName.trim(),
         role: params.role,
         age: params.age,
-        avatar_url: undefined,
+        avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : undefined),
         password_hash: params.password,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -423,6 +427,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return updated;
   };
 
+  const changePassword = async (currentPass: string, newPass: string): Promise<void> => {
+    if (!user) throw new Error('Not authenticated');
+    if (!newPass || newPass.length < 8) {
+      throw new Error('New password must be at least 8 characters.');
+    }
+    await db.updatePassword(user.id, currentPass, newPass);
+  };
+
+  const resetPasswordEmail = async (emailToReset: string): Promise<void> => {
+    const cleanEmail = emailToReset.trim().toLowerCase();
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+      if (error && !isSupabaseFallbackError(error)) {
+        throw new Error(error.message);
+      }
+    }
+  };
+
   const deleteAccount = async () => {
     if (!user) return;
     await db.deleteUserAccount(user.id);
@@ -441,6 +463,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         updateCurrentUserProfile,
+        changePassword,
+        resetPasswordEmail,
         deleteAccount,
       }}
     >

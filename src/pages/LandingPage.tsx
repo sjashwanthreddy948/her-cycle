@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CycleRing3D } from '../components/3d/CycleRing3D';
 import { 
   Heart, 
   Sparkles, 
@@ -11,68 +10,50 @@ import {
   Activity, 
   Star, 
   Calendar, 
+  CheckCircle2,
   ChevronRight,
   Zap,
-  Layers,
-  HeartHandshake
+  BatteryCharging,
+  Smile,
+  HeartHandshake,
+  ArrowRight
 } from 'lucide-react';
 import { Disclaimer } from '../components/common/Disclaimer';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'home' | 'phases' | 'partner' | 'privacy'>('home');
-
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
 
   return (
-    <div className="min-h-screen bg-[#FAF6F6] text-gray-900 selection:bg-rose-200 selection:text-rose-900 overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-white text-gray-900 selection:bg-rose-100 selection:text-rose-900 overflow-x-hidden font-sans">
       
       {/* ======================================================== */}
       {/* 1. FLOATING DARK PILL NAVBAR (Inspired by Reference UI)   */}
       {/* ======================================================== */}
       <nav className="fixed top-4 left-0 right-0 z-50 px-4 max-w-5xl mx-auto pointer-events-none">
-        <div className="pointer-events-auto bg-[#1A151A]/90 backdrop-blur-xl border border-white/10 rounded-full px-3.5 sm:px-6 py-2.5 sm:py-3 shadow-2xl flex items-center justify-between transition-all">
+        <div className="pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/10 rounded-full px-4 sm:px-6 py-2.5 sm:py-3 shadow-2xl flex items-center justify-between transition-all">
           
-          {/* Left Navigation Links (Desktop) */}
-          <div className="hidden md:flex items-center gap-6 text-xs font-semibold text-gray-300">
-            <button
-              onClick={() => { setActiveTab('home'); scrollToSection('hero'); }}
-              className={`hover:text-white transition ${activeTab === 'home' ? 'text-white font-bold' : ''}`}
-            >
-              Home
-            </button>
-            <button
-              onClick={() => { setActiveTab('phases'); scrollToSection('phases-section'); }}
-              className={`hover:text-white transition ${activeTab === 'phases' ? 'text-white font-bold' : ''}`}
-            >
-              Phases
-            </button>
-            <button
-              onClick={() => { setActiveTab('partner'); scrollToSection('partner-section'); }}
-              className={`hover:text-white transition ${activeTab === 'partner' ? 'text-white font-bold' : ''}`}
-            >
-              Partner Sync
-            </button>
-          </div>
-
-          {/* Center Brand Pill Badge */}
+          {/* Left Brand Badge */}
           <div 
             onClick={() => navigate('/')}
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-2.5 cursor-pointer group"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 via-pink-500 to-amber-400 p-0.5 shadow-md shadow-rose-500/20 group-hover:scale-105 transition">
-              <div className="w-full h-full bg-[#1A151A] rounded-full flex items-center justify-center">
+              <div className="w-full h-full bg-black rounded-full flex items-center justify-center">
                 <Heart className="w-4 h-4 text-rose-400 fill-rose-400" />
               </div>
             </div>
             <span className="text-base sm:text-lg font-black font-display tracking-tight text-white flex items-center gap-1">
-              Her<span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-pink-400">Cycle</span>
+              Her<span className="text-rose-400">Cycle</span>
             </span>
+          </div>
+
+          {/* Desktop Navigation Links */}
+          <div className="hidden md:flex items-center gap-6 text-xs font-semibold text-gray-300">
+            <a href="#hero" className="hover:text-white transition text-white font-bold">Home</a>
+            <a href="#features" className="hover:text-white transition">Features</a>
+            <a href="#phases" className="hover:text-white transition">Phases</a>
+            <a href="#partner" className="hover:text-white transition">Partner Sync</a>
+            <a href="#privacy" className="hover:text-white transition">Privacy</a>
           </div>
 
           {/* Right Action Buttons */}
@@ -86,7 +67,7 @@ export const LandingPage: React.FC = () => {
 
             <button
               onClick={() => navigate('/register')}
-              className="px-4 sm:px-5 py-2 rounded-full bg-gradient-to-r from-rose-500 via-pink-500 to-rose-600 text-white font-bold text-xs shadow-md shadow-rose-500/25 hover:shadow-rose-500/40 hover:scale-105 transition-all flex items-center gap-1 active:scale-95"
+              className="px-4 sm:px-5 py-2 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-500/25 hover:scale-105 transition-all flex items-center gap-1 active:scale-95"
             >
               <span>Get Started</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -96,287 +77,371 @@ export const LandingPage: React.FC = () => {
       </nav>
 
       {/* ======================================================== */}
-      {/* 2. HERO SECTION WITH ARCHED PORTRAIT & 3D CYCLE RING      */}
+      {/* 2. HERO SECTION MATCHING SPECIFICATION & REFERENCE IMAGE */}
       {/* ======================================================== */}
-      <header id="hero" className="relative pt-28 sm:pt-36 pb-16 sm:pb-24 px-4 overflow-hidden">
+      <section id="hero" className="relative pt-28 sm:pt-36 pb-16 sm:pb-24 px-4 overflow-hidden bg-white">
         
         {/* Subtle Ambient Background Gradients */}
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 w-[600px] h-[500px] bg-gradient-to-tr from-rose-200/40 via-amber-100/30 to-pink-200/40 blur-3xl pointer-events-none -z-10 rounded-full" />
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[700px] h-[550px] bg-gradient-to-tr from-rose-100/50 via-orange-50/40 to-pink-100/40 blur-3xl pointer-events-none -z-10 rounded-full" />
 
         <div className="max-w-4xl mx-auto text-center relative z-10">
           
-          {/* Playful Greeting Badge (Inspired by "Hello!" in Jenny UI) */}
-          <div className="relative inline-block mb-3">
-            <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-rose-200/80 text-rose-600 text-xs font-bold shadow-soft animate-bounce-subtle">
-              <Sparkles className="w-3.5 h-3.5 text-rose-500" />
-              <span>Hello! Meet HerCycle</span>
-            </div>
-            
-            {/* Playful Hand-Drawn Sketch Accent Lines */}
-            <svg className="absolute -top-3 -right-6 w-6 h-6 text-rose-400 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M4 12c4-6 10-6 16 0" />
-              <path d="M12 4v4" />
-            </svg>
-            <svg className="absolute -bottom-2 -left-6 w-5 h-5 text-amber-400 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M3 15c4 4 10 4 14 0" />
-            </svg>
+          {/* Small pill: "YOUR PERSONAL CYCLE COMPANION" */}
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-rose-50 border border-rose-200/80 text-rose-700 text-xs font-extrabold tracking-wider uppercase mb-5 shadow-xs">
+            <Sparkles className="w-3.5 h-3.5 text-rose-500" />
+            <span>YOUR PERSONAL CYCLE COMPANION</span>
           </div>
 
-          {/* Hero Main Headline */}
-          <h1 className="text-4xl sm:text-6xl font-black font-display tracking-tight text-gray-900 leading-[1.1] mb-4">
-            I'm <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-pink-500 to-amber-500">HerCycle</span>,<br />
-            Your Rhythm Sanctuary
+          {/* Large heading: "Understand your cycle. Feel more in control." with pink highlight */}
+          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black font-display tracking-tight text-gray-950 leading-[1.08] mb-5">
+            Understand your <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-pink-500 to-orange-500">cycle</span>.<br />
+            Feel more in <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-500 to-pink-500">control</span>.
           </h1>
 
-          <p className="text-sm sm:text-base text-gray-600 max-w-md mx-auto leading-relaxed mb-8">
-            Understand her cycle. Support her better. A serene personal tracking space for her and an empathetic, read-only window for her partner.
+          {/* Supporting text */}
+          <p className="text-base sm:text-lg text-gray-600 max-w-xl mx-auto leading-relaxed mb-8">
+            Track your periods, symptoms, mood and cycle patterns privately — and share only what you choose with someone you trust.
           </p>
 
+          {/* Action Buttons: [Start Tracking] [Login] */}
+          <div className="flex items-center justify-center gap-3.5 mb-14">
+            <button
+              onClick={() => navigate('/register')}
+              className="px-8 py-3.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-500/25 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <span>Start Tracking</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => navigate('/login')}
+              className="px-7 py-3.5 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-sm border border-gray-200 transition-all active:scale-95 flex items-center gap-2"
+            >
+              <span>Login</span>
+            </button>
+          </div>
+
           {/* ==================================================== */}
-          {/* ARCHED STAGE WITH 3D CYCLE RING & FLANKING CARDS     */}
+          {/* HERO VISUAL: WARM CIRCULAR ARCH + WOMAN PORTRAIT     */}
+          {/* WITH FLOATING STAT CARDS (Cycle Day 12, etc.)       */}
           {/* ==================================================== */}
-          <div className="relative max-w-2xl mx-auto mt-4 sm:mt-8 flex items-center justify-center">
+          <div className="relative max-w-2xl mx-auto flex items-end justify-center pt-8">
             
-            {/* The Signature Terracotta/Peach Arched Backdrop (Inspired by Reference) */}
-            <div className="absolute bottom-0 w-[300px] sm:w-[380px] h-[340px] sm:h-[420px] rounded-t-full bg-gradient-to-t from-[#FFA785]/30 via-[#FFC3AD]/25 to-[#FFF0EB]/80 border-t-2 border-x-2 border-rose-200/60 shadow-float -z-10" />
+            {/* Large circular pink/orange gradient shape backdrop */}
+            <div 
+              className="absolute bottom-0 w-[320px] sm:w-[420px] h-[360px] sm:h-[460px] rounded-t-full border-t-2 border-x-2 border-rose-200/60 shadow-2xl -z-10"
+              style={{
+                background: 'linear-gradient(180deg, rgba(254, 215, 170, 0.45) 0%, rgba(253, 164, 175, 0.5) 50%, rgba(255, 241, 242, 0.8) 100%)',
+              }}
+            />
 
-            {/* Left Flanking Floating Card: 4.9 Rating (Matching Reference Layout) */}
-            <div className="hidden sm:flex flex-col items-start gap-1 absolute -left-6 top-1/4 bg-white/90 backdrop-blur-xl border border-rose-100 p-4 rounded-3xl shadow-float max-w-[190px] text-left z-20 hover:scale-105 transition">
-              <div className="flex items-center gap-1 text-amber-400">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
-                ))}
-              </div>
-              <span className="text-xs font-extrabold text-gray-900 mt-1">4.9 / 5 Rating</span>
-              <p className="text-[11px] text-gray-500 leading-tight">
-                "Finally, empathetic cycle tracking backed by physiology."
-              </p>
-            </div>
-
-            {/* Right Flanking Floating Card: 100% Privacy (Matching Reference Layout) */}
-            <div className="hidden sm:flex flex-col items-start gap-1 absolute -right-6 top-1/3 bg-white/90 backdrop-blur-xl border border-rose-100 p-4 rounded-3xl shadow-float max-w-[190px] text-left z-20 hover:scale-105 transition">
-              <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-extrabold text-gray-900 mt-1">100% Private</span>
-              <p className="text-[11px] text-gray-500 leading-tight">
-                Zero cloud data selling. Single-use partner pairing.
-              </p>
-            </div>
-
-            {/* Central 3D Cycle Ring + Serene Woman Illustration */}
-            <div className="relative z-10 w-full py-4 flex flex-col items-center">
-              <CycleRing3D
-                currentCycleDay={12}
-                totalCycleLength={28}
-                isLandingPage={true}
+            {/* Woman's actual portrait photo naturally integrated */}
+            <div className="relative z-10 w-[280px] sm:w-[360px] h-[340px] sm:h-[430px] overflow-hidden rounded-t-full flex items-end justify-center">
+              <img
+                src="/assets/woman-portrait.png"
+                alt="HerCycle Wellness Companion"
+                className="w-full h-full object-cover object-top filter contrast-[1.02] drop-shadow-lg"
               />
+            </div>
 
-              {/* Overlaid Dual Action Pills at Base of Arch (Matching Reference Button Style) */}
-              <div className="mt-3 p-1.5 bg-white/90 backdrop-blur-xl border border-rose-200/80 rounded-full shadow-float flex items-center gap-2 z-20">
-                <button
-                  onClick={() => navigate('/register')}
-                  className="px-6 py-2.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white font-bold text-xs shadow-sm shadow-rose-200 flex items-center gap-1.5 active:scale-95 transition-all"
-                >
-                  <span>Get Started</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
-
-                <button
-                  onClick={() => navigate('/login')}
-                  className="px-5 py-2.5 rounded-full bg-rose-50/70 hover:bg-rose-100/70 text-rose-700 font-bold text-xs transition-all active:scale-95 flex items-center gap-1.5"
-                >
-                  <Users className="w-3.5 h-3.5 text-rose-500" />
-                  <span>Partner Portal</span>
-                </button>
+            {/* Floating Card 1 (Top Left): "Cycle Day 12" */}
+            <div className="absolute -left-2 sm:-left-8 top-12 sm:top-16 bg-white/95 backdrop-blur-md border border-rose-100/90 px-4 py-3 rounded-2xl shadow-float z-20 text-left hover:scale-105 transition-all">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cycle Day</span>
               </div>
-            </div>
-          </div>
-
-          {/* 4 Phase Pill Chips */}
-          <div id="phases-section" className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-xl mx-auto">
-            <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-sm border border-rose-100 shadow-xs flex items-center gap-2.5 text-left">
-              <div className="w-3 h-3 rounded-full bg-[#F43F5E] shrink-0 ring-4 ring-rose-100" />
-              <div>
-                <span className="text-xs font-bold text-gray-900 block">Menstrual</span>
-                <span className="text-[10px] text-gray-500">Days 1–5 · Rest & Renew</span>
-              </div>
+              <span className="text-2xl font-black font-display text-gray-900 leading-none">12</span>
+              <span className="text-[10px] text-rose-500 font-semibold block mt-0.5">Follicular Phase</span>
             </div>
 
-            <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-sm border border-pink-100 shadow-xs flex items-center gap-2.5 text-left">
-              <div className="w-3 h-3 rounded-full bg-[#EC4899] shrink-0 ring-4 ring-pink-100" />
-              <div>
-                <span className="text-xs font-bold text-gray-900 block">Follicular</span>
-                <span className="text-[10px] text-gray-500">Days 6–13 · Rising Energy</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-sm border border-amber-100 shadow-xs flex items-center gap-2.5 text-left">
-              <div className="w-3 h-3 rounded-full bg-[#F59E0B] shrink-0 ring-4 ring-amber-100" />
-              <div>
-                <span className="text-xs font-bold text-gray-900 block">Ovulation</span>
-                <span className="text-[10px] text-gray-500">Days 14–16 · Peak Vitality</span>
-              </div>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-sm border border-purple-100 shadow-xs flex items-center gap-2.5 text-left">
-              <div className="w-3 h-3 rounded-full bg-[#8B5CF6] shrink-0 ring-4 ring-purple-100" />
-              <div>
-                <span className="text-xs font-bold text-gray-900 block">Luteal</span>
-                <span className="text-[10px] text-gray-500">Days 17–28 · Gentle Care</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ======================================================== */}
-      {/* 3. SLEEK DARK GLASSMORPHISM SECTION ("Services / Tech")   */}
-      {/* ======================================================== */}
-      <section id="partner-section" className="bg-[#141015] text-white pt-20 pb-24 px-4 relative overflow-hidden">
-        
-        {/* Ambient Dark Glows */}
-        <div className="absolute top-0 right-1/4 w-96 h-96 bg-rose-600/15 blur-[120px] pointer-events-none rounded-full" />
-        <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-amber-500/10 blur-[140px] pointer-events-none rounded-full" />
-
-        <div className="max-w-5xl mx-auto relative z-10">
-          
-          {/* Header with Badges (Inspired by Reference Pill Cards) */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12 border-b border-white/10 pb-8">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-rose-400 text-xs font-bold mb-3">
-                <Zap className="w-3.5 h-3.5" />
-                <span>Next-Generation Wellness Engine</span>
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-extrabold font-display tracking-tight text-white">
-                Engineered for <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-400 to-amber-400">Empathy & Privacy</span>
-              </h2>
-            </div>
-
-            {/* Prototype & Feature Badges (Matching Reference Right Column) */}
-            <div className="flex flex-wrap gap-2">
-              <span className="px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-xs font-semibold text-gray-300">
-                ✨ 3D Three.js Ring
-              </span>
-              <span className="px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-xs font-semibold text-gray-300">
-                🔒 Zero Cloud Leakage
-              </span>
-              <span className="px-3.5 py-1.5 rounded-full bg-white/[0.06] border border-white/10 text-xs font-semibold text-gray-300">
-                🤝 1:1 Partner Sync
-              </span>
-            </div>
-          </div>
-
-          {/* 3 Frosted Glassmorphic Feature Cards (Inspired by the Reference Cards) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Card 1: Cycle Rhythm */}
-            <div className="group bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-2xl border border-white/10 hover:border-rose-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500/20 to-pink-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-5 group-hover:scale-110 transition">
-                  <Calendar className="w-6 h-6" />
+            {/* Floating Card 2 (Bottom Left): "Energy Good" */}
+            <div className="absolute -left-4 sm:-left-10 bottom-16 bg-white/95 backdrop-blur-md border border-rose-100/90 px-4 py-3 rounded-2xl shadow-float z-20 text-left hover:scale-105 transition-all">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center">
+                  <BatteryCharging className="w-4 h-4" />
                 </div>
-                <h3 className="text-xl font-bold font-display text-white mb-2">
-                  Physiological Rhythm
-                </h3>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Real-time phase tracking with an interactive 3D cycle ring. Calculates ovulation windows, follicular energy shifts, and period predictions.
-                </p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-rose-400 font-semibold">
-                <span>Explore Phases</span>
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
-              </div>
-            </div>
-
-            {/* Card 2: Partner Sanctuary */}
-            <div className="group bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-2xl border border-white/10 hover:border-pink-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 mb-5 group-hover:scale-110 transition">
-                  <HeartHandshake className="w-6 h-6" />
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Energy</span>
+                  <span className="text-sm font-extrabold text-gray-900">Good ⚡</span>
                 </div>
-                <h3 className="text-xl font-bold font-display text-white mb-2">
-                  Partner Sanctuary
-                </h3>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Cryptographic 6-character invite codes that expire immediately upon redemption. A read-only dashboard that shows how to best support her without medical intrusion.
-                </p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-pink-400 font-semibold">
-                <span>Single-Use Pairing</span>
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
               </div>
             </div>
 
-            {/* Card 3: Privacy & Zero Leakage */}
-            <div className="group bg-white/[0.03] hover:bg-white/[0.06] backdrop-blur-2xl border border-white/10 hover:border-emerald-500/40 rounded-3xl p-6 sm:p-7 shadow-2xl transition-all duration-300 flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-5 group-hover:scale-110 transition">
-                  <Lock className="w-6 h-6" />
+            {/* Floating Card 3 (Top Right): "Next Period 16 days" */}
+            <div className="absolute -right-2 sm:-right-8 top-10 sm:top-14 bg-white/95 backdrop-blur-md border border-rose-100/90 px-4 py-3 rounded-2xl shadow-float z-20 text-left hover:scale-105 transition-all">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center">
+                  <Calendar className="w-4 h-4" />
                 </div>
-                <h3 className="text-xl font-bold font-display text-white mb-2">
-                  Zero Data Selling
-                </h3>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Your intimate health logs, symptoms, and cycle notes are never sold or shared with third parties. Private journal notes and weight remain strictly hidden from partners.
-                </p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between text-xs text-emerald-400 font-semibold">
-                <span>Encrypted Security</span>
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Next Period</span>
+                  <span className="text-sm font-black font-display text-rose-600">16 days</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Bottom Call to Action Card in Dark Section */}
-          <div className="mt-14 rounded-3xl bg-gradient-to-r from-rose-950/60 via-pink-950/40 to-neutral-900 border border-rose-500/30 p-8 sm:p-10 text-center relative overflow-hidden shadow-2xl">
-            <div className="max-w-xl mx-auto relative z-10 space-y-4">
-              <h3 className="text-2xl sm:text-3xl font-bold font-display text-white">
-                Start Your Rhythm Journey Today
-              </h3>
-              <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
-                HerCycle is ready to use immediately. No credit cards, no demo accounts, and 100% control over what you share.
-              </p>
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <button
-                  onClick={() => navigate('/register')}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white font-bold text-sm shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:scale-105 transition-all flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <span>Create Free Account</span>
-                  <ArrowUpRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => navigate('/login')}
-                  className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold text-sm transition-all"
-                >
-                  Log In
-                </button>
+            {/* Floating Card 4 (Bottom Right): "Partner Sharing Active" */}
+            <div className="absolute -right-4 sm:-right-10 bottom-20 bg-white/95 backdrop-blur-md border border-emerald-100 px-4 py-3 rounded-2xl shadow-float z-20 text-left hover:scale-105 transition-all">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Partner Sharing</span>
+                  <span className="text-xs font-extrabold text-emerald-700 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Active (Alex)
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-[#0E0B0E] border-t border-white/5 py-8 px-4 text-center">
-        <div className="max-w-4xl mx-auto space-y-3">
-          <div className="flex items-center justify-center gap-2">
-            <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
-            <span className="text-sm font-bold text-gray-300 font-display">HerCycle</span>
+      {/* ======================================================== */}
+      {/* 3. FOUR PHASES DEEP DIVE                                 */}
+      {/* ======================================================== */}
+      <section id="phases" className="py-20 px-4 bg-[#FCF8F8] border-y border-rose-100/60">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center max-w-xl mx-auto mb-14">
+            <span className="text-xs font-extrabold uppercase tracking-widest text-rose-500 block mb-2">
+              Biological Rhythm
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black font-display tracking-tight text-gray-900 mb-3">
+              The Four Phases of Your Rhythm
+            </h2>
+            <p className="text-sm text-gray-600">
+              Your body shifts hormones across 4 distinct phases. Understanding where you are brings peace, clarity, and empowerment.
+            </p>
           </div>
-          <p className="text-[11px] text-gray-500">
-            Understand her cycle. Support her better. · Designed with Apple Health x Oura aesthetics
-          </p>
-          <div className="pt-2 max-w-md mx-auto">
-            <Disclaimer compact />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* Menstrual */}
+            <div className="p-6 rounded-3xl bg-white border border-rose-100 shadow-sm hover:shadow-md transition space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-rose-500 flex items-center justify-center font-bold text-sm">
+                01
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Menstrual Phase</h3>
+              <span className="text-xs font-semibold text-rose-600 block">Days 1–5 · Rest & Reset</span>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Estrogen and progesterone drop. Prioritize deep rest, gentle movement, warm nutrition, and cozy boundaries.
+              </p>
+            </div>
+
+            {/* Follicular */}
+            <div className="p-6 rounded-3xl bg-white border border-pink-100 shadow-sm hover:shadow-md transition space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-pink-50 border border-pink-200 text-pink-500 flex items-center justify-center font-bold text-sm">
+                02
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Follicular Phase</h3>
+              <span className="text-xs font-semibold text-pink-600 block">Days 6–13 · Rising Energy</span>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                FSH and estrogen rise. Mental clarity increases, social openness peaks, and energy levels surge.
+              </p>
+            </div>
+
+            {/* Ovulation */}
+            <div className="p-6 rounded-3xl bg-white border border-amber-100 shadow-sm hover:shadow-md transition space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-500 flex items-center justify-center font-bold text-sm">
+                03
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Ovulatory Phase</h3>
+              <span className="text-xs font-semibold text-amber-600 block">Days 14–16 · Peak Vitality</span>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                LH surge triggers egg release. Confidence, communication skills, and physical endurance reach maximum capacity.
+              </p>
+            </div>
+
+            {/* Luteal */}
+            <div className="p-6 rounded-3xl bg-white border border-purple-100 shadow-sm hover:shadow-md transition space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-200 text-purple-500 flex items-center justify-center font-bold text-sm">
+                04
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Luteal Phase</h3>
+              <span className="text-xs font-semibold text-purple-600 block">Days 17–28 · Turning Inward</span>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Progesterone dominates. Focus turns toward wrapping up tasks, mindful reflection, calming routines, and hydration.
+              </p>
+            </div>
           </div>
         </div>
+      </section>
+
+      {/* ======================================================== */}
+      {/* 4. PARTNER SYNC SECTION                                  */}
+      {/* ======================================================== */}
+      <section id="partner" className="py-20 px-4 bg-white">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-12">
+          
+          <div className="flex-1 space-y-5">
+            <span className="text-xs font-extrabold uppercase tracking-widest text-rose-500 block">
+              Empathetic Connection
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black font-display tracking-tight text-gray-900 leading-tight">
+              Share only what you choose with someone you trust.
+            </h2>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              No awkward conversations or misunderstandings. Generate a secure 6-digit connection code in your app. Your partner gets a dedicated read-only dashboard with empathy tips, daily reminders, and phase guidance.
+            </p>
+
+            <ul className="space-y-3 pt-2 text-xs text-gray-700 font-medium">
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Secure 6-digit expiring pairing code (15-minute validity)</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>You approve every connection request with his name & photo</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Fine-grained permissions: private notes and weight remain strictly hidden</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Instant one-tap pause or unlink anytime</span>
+              </li>
+            </ul>
+
+            <div className="pt-4">
+              <button
+                onClick={() => navigate('/register')}
+                className="px-7 py-3 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition"
+              >
+                Set Up Partner Sync
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full max-w-md bg-[#FFF5F7] p-6 rounded-4xl border border-rose-100 shadow-float">
+            <div className="bg-white rounded-3xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <img
+                    src="/assets/woman-portrait.png"
+                    alt="Sarah"
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-rose-300"
+                  />
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">Sarah's Cycle</h4>
+                    <span className="text-[10px] text-emerald-600 font-semibold">● Connected (Read-Only)</span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                  Day 12 · Follicular
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-rose-50/60 rounded-2xl border border-rose-100 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wide text-rose-600">Support Her Tip</span>
+                <p className="text-xs text-gray-700 font-medium">
+                  "Sarah is entering her high-energy follicular phase. Great time for outdoor activities or planning shared projects!"
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
+                  <span className="text-[10px] text-gray-400 block font-bold">NEXT PERIOD</span>
+                  <span className="text-sm font-bold text-gray-900">16 days</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
+                  <span className="text-[10px] text-gray-400 block font-bold">SHARED MOOD</span>
+                  <span className="text-sm font-bold text-gray-900">Great 😊</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ======================================================== */}
+      {/* 5. PRIVACY & SECURITY FIRST                              */}
+      {/* ======================================================== */}
+      <section id="privacy" className="py-20 px-4 bg-[#FCF8F8] border-t border-rose-100/60">
+        <div className="max-w-4xl mx-auto text-center space-y-8">
+          <div className="inline-flex p-3 rounded-3xl bg-rose-100 text-rose-600 mx-auto">
+            <Lock className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-3 max-w-xl mx-auto">
+            <h2 className="text-3xl font-black font-display text-gray-900">
+              Your Rhythm. Your Data. Your Peace.
+            </h2>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              We believe your intimate menstrual and wellness logs belong exclusively to you. We never sell your data, track you across the web, or display ads.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+            <div className="p-5 rounded-3xl bg-white border border-rose-100 shadow-xs space-y-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              <h4 className="text-xs font-bold text-gray-900">Database Row Security</h4>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Database-enforced Row Level Security ensures nobody can query your records without direct authorization.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-3xl bg-white border border-rose-100 shadow-xs space-y-2">
+              <Lock className="w-5 h-5 text-rose-500" />
+              <h4 className="text-xs font-bold text-gray-900">Zero Third-Party Trackers</h4>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                No telemetry tracking your location or browsing behavior. Pure physiological tracking.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-3xl bg-white border border-rose-100 shadow-xs space-y-2">
+              <ArrowUpRight className="w-5 h-5 text-amber-500" />
+              <h4 className="text-xs font-bold text-gray-900">Complete Data Export</h4>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                Download your full cycle history in CSV or JSON at any moment, or erase your account permanently with one click.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ======================================================== */}
+      {/* 6. CALL TO ACTION & FOOTER                               */}
+      {/* ======================================================== */}
+      <section className="py-20 px-4 bg-white text-center">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <h2 className="text-3xl sm:text-4xl font-black font-display text-gray-900">
+            Ready to find rhythm in your cycle?
+          </h2>
+          <p className="text-sm text-gray-600">
+            Join thousands of women and partners experiencing cycle tracking built on dignity, clarity, and trust.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => navigate('/register')}
+              className="px-8 py-3.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-200 transition hover:scale-105 active:scale-95"
+            >
+              Start Free Today
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="px-7 py-3.5 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-sm border border-gray-200 transition"
+            >
+              Partner Login
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-8 px-4 border-t border-gray-100 bg-[#FAF7F7] text-center text-xs text-gray-500 space-y-4">
+        <div className="flex items-center justify-center gap-2">
+          <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+          <span className="font-bold text-gray-900">HerCycle Sanctuary</span>
+        </div>
+        <p className="text-[11px] text-gray-400 max-w-md mx-auto">
+          HerCycle is a physiological wellness companion and is not intended as medical advice or contraception.
+        </p>
+        <p className="text-[10px] text-gray-400">
+          © {new Date().getFullYear()} HerCycle. All rights reserved. Built with privacy & empathy.
+        </p>
       </footer>
     </div>
   );
 };
-
-export default LandingPage;
