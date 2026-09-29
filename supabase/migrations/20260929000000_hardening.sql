@@ -1,6 +1,5 @@
 -- ====================================================================
--- HERCYCLE PRODUCTION DATABASE HARDENING & SECURITY MIGRATION
--- Migration: 20260929000000_hardening.sql
+-- HERCYCLE PRODUCTION SUPABASE SCHEMA (HARDENED & DEMO-FREE)
 -- ====================================================================
 
 -- 1. EXTENSIONS
@@ -131,10 +130,8 @@ CREATE TABLE IF NOT EXISTS partner_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Partial unique index: Only one active unused code per woman at any given time
-CREATE UNIQUE INDEX IF NOT EXISTS partner_codes_active_unused_idx 
-ON partner_codes (woman_id) 
-WHERE used = FALSE AND expires_at > NOW();
+CREATE INDEX IF NOT EXISTS partner_codes_woman_used_idx 
+ON partner_codes (woman_id, used);
 
 -- 9. PARTNER LINKS TABLE (Strict 1:1, woman_id <> partner_id)
 CREATE TABLE IF NOT EXISTS partner_links (
@@ -150,7 +147,59 @@ CREATE TABLE IF NOT EXISTS partner_links (
   CONSTRAINT check_different_users CHECK (woman_id <> partner_id)
 );
 
--- 10. CODE ATTEMPTS (Rate limiting: max 5 failed attempts per 15 minutes)
+-- 10. SYMPTOMS DICTIONARY & DAILY SYMPTOMS
+CREATE TABLE IF NOT EXISTS symptoms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT UNIQUE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS daily_symptoms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  daily_log_id UUID NOT NULL REFERENCES daily_logs(id) ON DELETE CASCADE,
+  symptom_id UUID NOT NULL REFERENCES symptoms(id) ON DELETE CASCADE,
+  severity TEXT CHECK (severity IN ('mild', 'moderate', 'severe')),
+  UNIQUE(daily_log_id, symptom_id)
+);
+
+-- 11. PARTNER CONNECTION CODES (6-digit numeric, SHA-256 hash, 15m expiration)
+CREATE TABLE IF NOT EXISTS partner_connection_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  woman_user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_partner_connection_codes_hash ON partner_connection_codes(code_hash);
+CREATE INDEX IF NOT EXISTS idx_partner_connection_codes_woman ON partner_connection_codes(woman_user_id);
+
+-- 12. PARTNER CONNECTIONS (Pending -> Approved / Declined)
+CREATE TABLE IF NOT EXISTS partner_connections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  woman_user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  partner_user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'paused')),
+  approved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT check_different_connection_users CHECK (woman_user_id <> partner_user_id),
+  CONSTRAINT unique_woman_connection UNIQUE (woman_user_id),
+  CONSTRAINT unique_partner_connection UNIQUE (partner_user_id)
+);
+
+-- 13. NOTIFICATIONS TABLE
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  read BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read);
+
+-- 14. CODE ATTEMPTS (Rate limiting: max 5 failed attempts per 15 minutes)
 CREATE TABLE IF NOT EXISTS code_attempts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -158,7 +207,7 @@ CREATE TABLE IF NOT EXISTS code_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_code_attempts_user_time ON code_attempts(user_id, attempt_time);
 
--- 11. SHARING PERMISSIONS TABLE
+-- 15. SHARING PERMISSIONS TABLE
 CREATE TABLE IF NOT EXISTS sharing_permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   link_id UUID NOT NULL REFERENCES partner_links(id) ON DELETE CASCADE,
@@ -168,14 +217,19 @@ CREATE TABLE IF NOT EXISTS sharing_permissions (
   CONSTRAINT unique_link_permission UNIQUE (link_id, permission_name)
 );
 
--- 12. ROW LEVEL SECURITY POLICIES
+-- 16. ROW LEVEL SECURITY POLICIES
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE active_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cycle_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE period_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE symptoms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_symptoms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE partner_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE partner_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE partner_connection_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE partner_connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE code_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sharing_permissions ENABLE ROW LEVEL SECURITY;
 
@@ -185,9 +239,62 @@ CREATE POLICY "Deny anon on active_sessions" ON active_sessions FOR ALL TO anon 
 CREATE POLICY "Deny anon on cycle_profiles" ON cycle_profiles FOR ALL TO anon USING (false);
 CREATE POLICY "Deny anon on period_logs" ON period_logs FOR ALL TO anon USING (false);
 CREATE POLICY "Deny anon on daily_logs" ON daily_logs FOR ALL TO anon USING (false);
+CREATE POLICY "Deny anon on symptoms" ON symptoms FOR ALL TO anon USING (false);
+CREATE POLICY "Deny anon on daily_symptoms" ON daily_symptoms FOR ALL TO anon USING (false);
 CREATE POLICY "Deny anon on partner_codes" ON partner_codes FOR ALL TO anon USING (false);
 CREATE POLICY "Deny anon on partner_links" ON partner_links FOR ALL TO anon USING (false);
+CREATE POLICY "Deny anon on partner_connection_codes" ON partner_connection_codes FOR ALL TO anon USING (false);
+CREATE POLICY "Deny anon on partner_connections" ON partner_connections FOR ALL TO anon USING (false);
+CREATE POLICY "Deny anon on notifications" ON notifications FOR ALL TO anon USING (false);
 CREATE POLICY "Deny anon on sharing_permissions" ON sharing_permissions FOR ALL TO anon USING (false);
+
+-- Notifications RLS
+CREATE POLICY "Users view own notifications" ON notifications
+  FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Users update own notifications" ON notifications
+  FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Symptoms public read to authenticated users
+CREATE POLICY "Authenticated users view symptoms" ON symptoms
+  FOR SELECT TO authenticated USING (true);
+
+-- Daily symptoms access only by owning user
+CREATE POLICY "Users manage own daily symptoms" ON daily_symptoms
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM daily_logs dl
+      WHERE dl.id = daily_symptoms.daily_log_id
+        AND dl.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM daily_logs dl
+      WHERE dl.id = daily_symptoms.daily_log_id
+        AND dl.user_id = auth.uid()
+    )
+  );
+
+-- Partner Connections RLS
+CREATE POLICY "Users view partner connection they belong to" ON partner_connections
+  FOR SELECT TO authenticated
+  USING (auth.uid() = woman_user_id OR auth.uid() = partner_user_id);
+
+CREATE POLICY "Woman updates partner connection" ON partner_connections
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = woman_user_id)
+  WITH CHECK (auth.uid() = woman_user_id);
+
+CREATE POLICY "Woman deletes partner connection" ON partner_connections
+  FOR DELETE TO authenticated
+  USING (auth.uid() = woman_user_id);
+
+-- Partner Connection Codes RLS
+CREATE POLICY "Women manage own partner connection codes" ON partner_connection_codes
+  FOR ALL TO authenticated
+  USING (auth.uid() = woman_user_id)
+  WITH CHECK (auth.uid() = woman_user_id);
 
 -- Profiles RLS
 CREATE POLICY "Users view own profile" ON profiles 
@@ -279,10 +386,10 @@ CREATE POLICY "Partner views sharing permissions granted" ON sharing_permissions
   );
 
 -- ====================================================================
--- 13. SECURITY DEFINER FUNCTIONS
+-- 17. SECURITY DEFINER FUNCTIONS
 -- ====================================================================
 
--- Function: Generate Partner Code (HER-XXXXXX, A-Z without I/O and 2-9)
+-- Function: Generate Partner Code (Secure 6-digit numeric code, 15-minute Expiry, SHA-256 hash)
 CREATE OR REPLACE FUNCTION generate_partner_code()
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -291,10 +398,10 @@ AS $$
 DECLARE
   v_woman_id UUID;
   v_role user_role;
-  v_chars TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   v_code TEXT;
-  v_random_bytes BYTEA;
-  v_idx INT;
+  v_code_hash TEXT;
+  v_expires_at TIMESTAMPTZ;
+  v_num INT;
   v_try INT := 0;
 BEGIN
   v_woman_id := auth.uid();
@@ -307,36 +414,38 @@ BEGIN
     RAISE EXCEPTION 'Only women can generate partner connection codes';
   END IF;
 
-  -- Check if woman already has an active approved partner
-  IF EXISTS (SELECT 1 FROM partner_links WHERE woman_id = v_woman_id AND status = 'approved') THEN
-    RAISE EXCEPTION 'You already have an active partner linked. Please disconnect before generating a new invite code.';
-  END IF;
-
   -- Invalidate and immediately expire any previous unused codes for this woman
   UPDATE partner_codes 
   SET used = TRUE, expires_at = NOW() 
   WHERE woman_id = v_woman_id AND used = FALSE;
 
-  -- Generate 6-char random alphanumeric code with retry on collision
+  UPDATE partner_connection_codes
+  SET used_at = NOW()
+  WHERE woman_user_id = v_woman_id AND used_at IS NULL;
+
+  v_expires_at := NOW() + INTERVAL '15 minutes';
+
+  -- Generate 6-digit numeric code (100000 - 999999)
   LOOP
     v_try := v_try + 1;
     IF v_try > 20 THEN
       RAISE EXCEPTION 'Could not generate unique code, please try again';
     END IF;
 
-    v_random_bytes := gen_random_bytes(6);
-    v_code := 'HER-';
-    FOR i IN 0..5 LOOP
-      v_idx := (get_byte(v_random_bytes, i) % length(v_chars)) + 1;
-      v_code := v_code || substr(v_chars, v_idx, 1);
-    END LOOP;
+    v_num := 100000 + floor(random() * 900000)::INT;
+    v_code := v_num::TEXT;
+    v_code_hash := encode(digest(v_code, 'sha256'), 'hex');
 
     BEGIN
       INSERT INTO partner_codes (code, woman_id, expires_at, used)
-      VALUES (v_code, v_woman_id, NOW() + INTERVAL '24 hours', FALSE);
+      VALUES (v_code, v_woman_id, v_expires_at, FALSE);
+
+      INSERT INTO partner_connection_codes (woman_user_id, code_hash, expires_at)
+      VALUES (v_woman_id, v_code_hash, v_expires_at);
+
       EXIT; -- Insert succeeded
     EXCEPTION WHEN unique_violation THEN
-      -- Retry on rare collision
+      -- Retry on collision
     END;
   END LOOP;
 
@@ -422,6 +531,18 @@ BEGIN
   VALUES (v_code_row.woman_id, v_partner_id, 'pending', FALSE)
   RETURNING id INTO v_link_id;
 
+  INSERT INTO partner_connections (id, woman_user_id, partner_user_id, status)
+  VALUES (v_link_id, v_code_row.woman_id, v_partner_id, 'pending');
+
+  -- Send notification to woman
+  INSERT INTO notifications (user_id, type, title, body)
+  VALUES (
+    v_code_row.woman_id,
+    'partner_request',
+    'Partner Connection Request',
+    'A partner has entered your code and requested to connect.'
+  );
+
   -- 7. Initialize default permissions
   INSERT INTO sharing_permissions (link_id, permission_name, enabled) VALUES
     (v_link_id, 'cycle_phase', TRUE),
@@ -444,7 +565,82 @@ BEGIN
 END;
 $$;
 
--- 14. SECURE PARTNER VIEW (No private notes or weight; filtered by permissions)
+-- Function: Approve Partner Connection
+CREATE OR REPLACE FUNCTION approve_partner_connection(p_link_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_woman_id UUID;
+  v_partner_id UUID;
+BEGIN
+  v_woman_id := auth.uid();
+  IF v_woman_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  SELECT partner_id INTO v_partner_id
+  FROM partner_links
+  WHERE id = p_link_id AND woman_id = v_woman_id;
+
+  IF v_partner_id IS NULL THEN
+    RAISE EXCEPTION 'Connection request not found or unauthorized';
+  END IF;
+
+  UPDATE partner_links
+  SET status = 'approved', approved_at = NOW()
+  WHERE id = p_link_id;
+
+  UPDATE partner_connections
+  SET status = 'approved', approved_at = NOW(), updated_at = NOW()
+  WHERE id = p_link_id;
+
+  INSERT INTO notifications (user_id, type, title, body)
+  VALUES (
+    v_partner_id,
+    'partner_approved',
+    'Connection Approved! 🎉',
+    'Your partner has approved your connection request.'
+  );
+END;
+$$;
+
+-- Function: Decline Partner Connection
+CREATE OR REPLACE FUNCTION decline_partner_connection(p_link_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_woman_id UUID;
+  v_partner_id UUID;
+BEGIN
+  v_woman_id := auth.uid();
+  IF v_woman_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  SELECT partner_id INTO v_partner_id
+  FROM partner_links
+  WHERE id = p_link_id AND woman_id = v_woman_id;
+
+  DELETE FROM partner_links WHERE id = p_link_id;
+  DELETE FROM partner_connections WHERE id = p_link_id;
+
+  IF v_partner_id IS NOT NULL THEN
+    INSERT INTO notifications (user_id, type, title, body)
+    VALUES (
+      v_partner_id,
+      'partner_declined',
+      'Connection Declined',
+      'The partner connection request was declined.'
+    );
+  END IF;
+END;
+$$;
+
+-- 18. SECURE PARTNER VIEW (No private notes or weight; filtered by permissions)
 CREATE OR REPLACE VIEW partner_view AS
 SELECT 
   pl.id AS link_id,
@@ -457,7 +653,6 @@ SELECT
   cp.average_cycle_length,
   cp.average_period_length,
   cp.last_period_start,
-  -- Aggregated permission map
   COALESCE(
     (
       SELECT jsonb_object_agg(sp.permission_name, sp.enabled)
@@ -473,7 +668,7 @@ WHERE pl.partner_id = auth.uid()
   AND pl.status = 'approved'
   AND pl.is_paused = FALSE;
 
--- 15. Server Function: Cascading Account Deletion
+-- 19. Server Function: Cascading Account Deletion
 CREATE OR REPLACE FUNCTION delete_user_account()
 RETURNS VOID
 LANGUAGE plpgsql

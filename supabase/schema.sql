@@ -130,10 +130,8 @@ CREATE TABLE IF NOT EXISTS partner_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Partial unique index: Only one active unused code per woman at any given time
-CREATE UNIQUE INDEX IF NOT EXISTS partner_codes_active_unused_idx 
-ON partner_codes (woman_id) 
-WHERE used = FALSE AND expires_at > NOW();
+CREATE INDEX IF NOT EXISTS partner_codes_woman_used_idx 
+ON partner_codes (woman_id, used);
 
 -- 9. PARTNER LINKS TABLE (Strict 1:1, woman_id <> partner_id)
 CREATE TABLE IF NOT EXISTS partner_links (
