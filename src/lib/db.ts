@@ -3,592 +3,446 @@ import {
   CycleProfile, 
   PeriodLog, 
   DailyLog, 
-  PartnerLink,
+  PartnerLink, 
   PartnerConnection,
-  PartnerCode,
+  PartnerCode, 
   SharingPermissionsMap, 
-  PermissionKey,
-  AppNotification
+  PermissionKey, 
+  AppNotification 
 } from '../types/database';
 import { supabase, isSupabaseConfigured } from './supabase';
-import { standaloneDb } from './standaloneDb';
 import { normalizePartnerCode, normalizeSixDigitCode } from './codeUtils';
 
-function isMissingSchemaError(err: any): boolean {
-  if (!err) return false;
-  const msg = (err.message || '').toLowerCase();
-  const code = (err.code || '').toLowerCase();
-  return (
-    code === 'pgrst205' ||
-    code === '42p01' ||
-    code === '42883' ||
-    msg.includes('schema cache') ||
-    msg.includes('could not find the table') ||
-    msg.includes('relation') ||
-    msg.includes('does not exist') ||
-    msg.includes('function')
-  );
+function requireSupabase() {
+  if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase is not configured. Please check your environment variables.');
+  }
+  return supabase;
 }
 
 export const db = {
   // 1. Profiles
   async getProfile(userId: string): Promise<UserProfile | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getProfile(userId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getProfile(userId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getProfile error:', error);
       }
-      return data as UserProfile | null;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getProfile(userId);
-      throw e;
+      throw error;
     }
+    return data as UserProfile | null;
   },
 
   async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.updateProfile(userId, updates);
-    }
-    try {
-      const client = supabase;
-      const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
-      delete safeUpdates.role;
-      delete safeUpdates.id;
+    const client = requireSupabase();
+    const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
+    delete safeUpdates.role;
+    delete safeUpdates.id;
 
-      const { data, error } = await client
-        .from('profiles')
-        .update(safeUpdates)
-        .eq('id', userId)
-        .select()
-        .single();
+    const { data, error } = await client
+      .from('profiles')
+      .update(safeUpdates)
+      .eq('id', userId)
+      .select()
+      .single();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.updateProfile(userId, updates);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] updateProfile error:', error);
       }
-      return data as UserProfile;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.updateProfile(userId, updates);
-      throw e;
+      throw error;
     }
+    return data as UserProfile;
   },
 
-  // 2. Active Session Enforcement
-  async upsertActiveSession(userId: string, sessionId: string, device?: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.upsertActiveSession(userId, sessionId, device);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client
-        .from('active_sessions')
-        .upsert({
-          user_id: userId,
-          session_id: sessionId,
-          device: device || (typeof navigator !== 'undefined' ? navigator.userAgent : 'device'),
-          updated_at: new Date().toISOString(),
-        });
-
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.upsertActiveSession(userId, sessionId, device);
-        throw error;
-      }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.upsertActiveSession(userId, sessionId, device);
-      throw e;
-    }
-  },
-
-  async getActiveSession(userId: string): Promise<string | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getActiveSession(userId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('active_sessions')
-        .select('session_id')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getActiveSession(userId);
-        throw error;
-      }
-      return data?.session_id || null;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getActiveSession(userId);
-      throw e;
-    }
-  },
-
-  // 3. Cycle Profile
+  // 2. Cycle Profile
   async getCycleProfile(userId: string): Promise<CycleProfile | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getCycleProfile(userId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('cycle_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('cycle_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getCycleProfile(userId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getCycleProfile error:', error);
       }
-      return data as CycleProfile | null;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getCycleProfile(userId);
-      throw e;
+      throw error;
     }
+    return data as CycleProfile | null;
   },
 
   async updateCycleProfile(userId: string, updates: Partial<CycleProfile>): Promise<CycleProfile> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.updateCycleProfile(userId, updates);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('cycle_profiles')
-        .upsert({
-          user_id: userId,
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('cycle_profiles')
+      .upsert({
+        user_id: userId,
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.updateCycleProfile(userId, updates);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] updateCycleProfile error:', error);
       }
-      return data as CycleProfile;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.updateCycleProfile(userId, updates);
-      throw e;
+      throw error;
     }
+    return data as CycleProfile;
   },
 
-  // 4. Period Logs
+  // 3. Period Logs
   async getPeriodLogs(userId: string): Promise<PeriodLog[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getPeriodLogs(userId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('period_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_date', { ascending: false });
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('period_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('start_date', { ascending: false });
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getPeriodLogs(userId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getPeriodLogs error:', error);
       }
-      return data as PeriodLog[];
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getPeriodLogs(userId);
-      throw e;
+      throw error;
     }
+    return (data || []) as PeriodLog[];
   },
 
   async savePeriodLog(log: Omit<PeriodLog, 'id' | 'created_at'> & { id?: string }): Promise<PeriodLog> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.savePeriodLog(log);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('period_logs')
-        .upsert({
-          ...log,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('period_logs')
+      .upsert({
+        ...log,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.savePeriodLog(log);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] savePeriodLog error:', error);
       }
-
-      const { data: latestPeriod } = await client
-        .from('period_logs')
-        .select('start_date')
-        .eq('user_id', log.user_id)
-        .order('start_date', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (latestPeriod) {
-        await this.updateCycleProfile(log.user_id, {
-          last_period_start: latestPeriod.start_date,
-        });
-      }
-
-      return data as PeriodLog;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.savePeriodLog(log);
-      throw e;
+      throw error;
     }
+
+    // Sync latest period start to cycle_profiles
+    const { data: latestPeriod } = await client
+      .from('period_logs')
+      .select('start_date')
+      .eq('user_id', log.user_id)
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestPeriod) {
+      await this.updateCycleProfile(log.user_id, {
+        last_period_start: latestPeriod.start_date,
+      });
+    }
+
+    return data as PeriodLog;
   },
 
   async deletePeriodLog(id: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.deletePeriodLog(id);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client
-        .from('period_logs')
-        .delete()
-        .eq('id', id);
+    const client = requireSupabase();
+    const { error } = await client
+      .from('period_logs')
+      .delete()
+      .eq('id', id);
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.deletePeriodLog(id);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] deletePeriodLog error:', error);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.deletePeriodLog(id);
-      throw e;
+      throw error;
     }
   },
 
-  // 5. Daily Health Logs
+  // 4. Daily Health Logs
   async getDailyLogs(userId: string, limit = 90): Promise<DailyLog[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getDailyLogs(userId, limit);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('daily_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('log_date', { ascending: false })
-        .limit(limit);
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('log_date', { ascending: false })
+      .limit(limit);
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getDailyLogs(userId, limit);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getDailyLogs error:', error);
       }
-      return data as DailyLog[];
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getDailyLogs(userId, limit);
-      throw e;
+      throw error;
     }
+    return (data || []) as DailyLog[];
   },
 
   async saveDailyLog(log: Omit<DailyLog, 'id' | 'created_at'> & { id?: string }): Promise<DailyLog> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.saveDailyLog(log);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('daily_logs')
-        .upsert(
-          {
-            ...log,
-            created_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,log_date' }
-        )
-        .select()
-        .single();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('daily_logs')
+      .upsert(
+        {
+          ...log,
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,log_date' }
+      )
+      .select()
+      .single();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.saveDailyLog(log);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] saveDailyLog error:', error);
       }
-      return data as DailyLog;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.saveDailyLog(log);
-      throw e;
+      throw error;
     }
+    return data as DailyLog;
   },
 
-  // 6. Partner Codes (HER-XXXXXX, 24h expiration, instant expiration on redemption)
+  // 5. Partner Codes (Real 6-Digit Server Generated, Verified in DB)
   async getActivePartnerCode(womanId: string): Promise<PartnerCode | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getActivePartnerCode(womanId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('partner_codes')
-        .select('*')
-        .eq('woman_id', womanId)
-        .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
-        .maybeSingle();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('partner_codes')
+      .select('*')
+      .eq('woman_id', womanId)
+      .eq('used', false)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getActivePartnerCode(womanId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getActivePartnerCode error:', error);
       }
-      return data as PartnerCode | null;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getActivePartnerCode(womanId);
-      throw e;
+      throw error;
     }
+    return data as PartnerCode | null;
   },
 
   async generatePartnerCode(womanId?: string): Promise<string> {
-    if (!isSupabaseConfigured || !supabase) {
-      if (!womanId) throw new Error('Woman ID is required');
-      return standaloneDb.generatePartnerCode(womanId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client.rpc('generate_partner_code');
-      if (error) {
-        if (import.meta.env.DEV) {
-          console.error('[HerCycle Code Gen Error]', error);
-        }
-        if (isMissingSchemaError(error) && womanId) return standaloneDb.generatePartnerCode(womanId);
-        throw new Error('Unable to generate connection code. Please try again.');
-      }
+    const client = requireSupabase();
 
-      const generatedCode = String(data).trim();
-      if (!generatedCode || !/^\d{6}$/.test(generatedCode)) {
-        throw new Error('Unable to generate connection code. Please try again.');
-      }
-
+    // 1. Execute server-side security definer RPC
+    const { data, error } = await client.rpc('generate_partner_code');
+    if (error) {
       if (import.meta.env.DEV) {
-        console.log('[HerCycle Partner Code Generated]', {
-          code: generatedCode,
-          womanId,
-          timestamp: new Date().toISOString(),
-        });
+        console.error('[HerCycle DB] generate_partner_code RPC error:', error);
       }
-
-      return generatedCode;
-    } catch (e: any) {
-      if (isMissingSchemaError(e) && womanId) return standaloneDb.generatePartnerCode(womanId);
-      if (import.meta.env.DEV) {
-        console.error('[HerCycle Code Gen Exception]', e);
-      }
-      throw new Error(e.message || 'Unable to generate connection code. Please try again.');
+      throw new Error(error.message || 'Unable to generate connection code. Please try again.');
     }
+
+    const generatedCode = String(data).trim();
+    if (!generatedCode || !/^\d{6}$/.test(generatedCode)) {
+      throw new Error('Database did not return a valid 6-digit connection code. Please try again.');
+    }
+
+    // 2. Immediately verify that the code was persisted in the Supabase database
+    const { data: verifiedRow, error: verifyError } = await client
+      .from('partner_codes')
+      .select('code, woman_id, expires_at, used')
+      .eq('code', generatedCode)
+      .maybeSingle();
+
+    if (verifyError || !verifiedRow) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] Partner code database persistence verification failed:', verifyError);
+      }
+      // If the INSERT verification fails, do NOT display the code!
+      throw new Error('Partner code creation could not be verified in the database. Please try again.');
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[HerCycle DB] Partner code verified in database:', {
+        code: verifiedRow.code,
+        woman_id: verifiedRow.woman_id,
+        expires_at: verifiedRow.expires_at,
+        used: verifiedRow.used,
+      });
+    }
+
+    return generatedCode;
   },
 
   async redeemPartnerCode(code: string, partnerId?: string): Promise<{ success: boolean; link_id: string; status: string }> {
+    const client = requireSupabase();
     const clean = normalizeSixDigitCode(code) || normalizePartnerCode(code);
 
-    // Developer logging (NEVER log sensitive tokens or passwords)
     if (import.meta.env.DEV) {
-      console.log('[HerCycle Partner Code Redeem Request]', {
+      console.log('[HerCycle DB] Redeeming partner code:', {
         enteredCode: code,
         normalizedCode: clean,
         partnerId,
-        isSupabase: Boolean(isSupabaseConfigured && supabase),
-        timestamp: new Date().toISOString(),
       });
     }
 
     if (!clean || clean.length !== 6) {
-      throw new Error("That connection code isn't valid. Please check the code and try again.");
+      throw new Error("That connection code isn't valid. Please check the code and enter 6 digits.");
     }
 
-    if (!isSupabaseConfigured || !supabase) {
-      if (!partnerId) throw new Error('Your session has expired. Please log in again.');
-      return standaloneDb.redeemPartnerCode(partnerId, clean);
-    }
+    // Call server-side validation RPC
+    let res = await client.rpc('validate_partner_connection_code', {
+      entered_code: clean,
+    });
 
-    try {
-      const client = supabase;
-      // Try validate_partner_connection_code first
-      let res = await client.rpc('validate_partner_connection_code', {
-        entered_code: clean,
+    if (res.error && res.error.message && (res.error.message.includes('function') || res.error.code === '42883')) {
+      res = await client.rpc('redeem_partner_code', {
+        code_input: clean,
       });
+    }
 
-      if (res.error && res.error.message && (res.error.message.includes('function') || res.error.code === '42883')) {
-        res = await client.rpc('redeem_partner_code', {
-          code_input: clean,
-        });
-      }
-
-      if (res.error) {
-        if (import.meta.env.DEV) {
-          console.error('[HerCycle Partner DB Error]', {
-            errorCode: res.error.code,
-            errorMessage: res.error.message,
-            errorDetails: res.error.details,
-          });
-        }
-        if (isMissingSchemaError(res.error) && partnerId) {
-          return standaloneDb.redeemPartnerCode(partnerId, clean);
-        }
-        const rawMsg = res.error.message || '';
-        const colonIdx = rawMsg.indexOf(':');
-        const cleanMsg = (colonIdx !== -1 && colonIdx < 20) ? rawMsg.slice(colonIdx + 1).trim() : rawMsg;
-        throw new Error(cleanMsg || "We couldn't process the connection right now. Please try again.");
-      }
-
+    if (res.error) {
       if (import.meta.env.DEV) {
-        console.log('[HerCycle Partner Code Redeem Success]', res.data);
+        console.error('[HerCycle DB] Partner code redemption error:', res.error);
       }
-
-      return res.data;
-    } catch (err: any) {
-      if (import.meta.env.DEV) {
-        console.error('[HerCycle Partner Code Redeem Exception]', err);
-      }
-      if (partnerId && isMissingSchemaError(err)) {
-        return standaloneDb.redeemPartnerCode(partnerId, clean);
-      }
-      const rawMsg = err.message || '';
+      const rawMsg = res.error.message || '';
       const colonIdx = rawMsg.indexOf(':');
       const cleanMsg = (colonIdx !== -1 && colonIdx < 20) ? rawMsg.slice(colonIdx + 1).trim() : rawMsg;
       throw new Error(cleanMsg || "We couldn't process the connection right now. Please try again.");
     }
+
+    const resultData = res.data || {};
+    const linkId = resultData.connection_id || resultData.link_id || '';
+
+    return {
+      success: true,
+      link_id: linkId,
+      status: resultData.status || 'pending',
+    };
   },
 
-  async redeemAndCreatePartner(
-    code: string,
-    fullName?: string,
-    email?: string,
-    password?: string
-  ): Promise<{ profile: UserProfile; linkId: string }> {
-    return standaloneDb.redeemAndCreatePartner(code, fullName, email, password);
-  },
-
-  // 7. Partner Links
+  // 6. Partner Links & Connections
   async getPartnerLink(userId: string, role: 'woman' | 'partner'): Promise<PartnerLink | null> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getPartnerLink(userId, role);
-    }
-    try {
-      const client = supabase;
-      if (role === 'woman') {
-        const { data, error } = await client
-          .from('partner_links')
-          .select(`
-            *,
-            partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
-          `)
-          .eq('woman_id', userId)
-          .maybeSingle();
+    const client = requireSupabase();
 
-        if (error) {
-          if (isMissingSchemaError(error)) return standaloneDb.getPartnerLink(userId, role);
-          throw error;
+    if (role === 'woman') {
+      const { data, error } = await client
+        .from('partner_links')
+        .select(`
+          *,
+          partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
+        `)
+        .eq('woman_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle DB] getPartnerLink (woman) error:', error);
         }
-        if (!data) return null;
-
-        const p = data.partner as any;
-        return {
-          ...data,
-          partner_name: p?.full_name,
-          partner_email: p?.email,
-        };
-      } else {
-        const { data, error } = await client
-          .from('partner_links')
-          .select(`
-            *,
-            woman:profiles!partner_links_woman_id_fkey(full_name, avatar_url, email)
-          `)
-          .eq('partner_id', userId)
-          .maybeSingle();
-
-        if (error) {
-          if (isMissingSchemaError(error)) return standaloneDb.getPartnerLink(userId, role);
-          throw error;
-        }
-        if (!data) return null;
-
-        const w = data.woman as any;
-        return {
-          ...data,
-          woman_name: w?.full_name,
-        };
+        throw error;
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getPartnerLink(userId, role);
-      throw e;
+      if (!data) return null;
+
+      const p = (data.partner as any) || null;
+      return {
+        ...data,
+        partner_name: p?.full_name || 'Partner',
+        partner_email: p?.email || '',
+        partner_avatar_url: p?.avatar_url || null,
+      };
+    } else {
+      const { data, error } = await client
+        .from('partner_links')
+        .select(`
+          *,
+          woman:profiles!partner_links_woman_id_fkey(full_name, avatar_url, email)
+        `)
+        .eq('partner_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle DB] getPartnerLink (partner) error:', error);
+        }
+        throw error;
+      }
+      if (!data) return null;
+
+      const w = (data.woman as any) || null;
+      return {
+        ...data,
+        woman_name: w?.full_name || 'Partner',
+        woman_avatar_url: w?.avatar_url || null,
+      };
     }
   },
 
   async approvePartnerLink(linkId: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.approvePartnerLink(linkId);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client
-        .from('partner_links')
-        .update({
-          status: 'approved',
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', linkId);
+    const client = requireSupabase();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.approvePartnerLink(linkId);
-        throw error;
+    // 1. Call server function
+    const { error: rpcErr } = await client.rpc('approve_partner_connection', { p_link_id: linkId });
+    if (rpcErr) {
+      if (import.meta.env.DEV) {
+        console.warn('[HerCycle DB] approve_partner_connection RPC error, falling back to direct update:', rpcErr);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.approvePartnerLink(linkId);
-      throw e;
     }
+
+    // 2. Direct updates to ensure both partner_links and partner_connections are synchronized
+    const now = new Date().toISOString();
+    await client
+      .from('partner_links')
+      .update({
+        status: 'approved',
+        approved_at: now,
+      })
+      .eq('id', linkId);
+
+    await client
+      .from('partner_connections')
+      .update({
+        status: 'approved',
+        approved_at: now,
+        updated_at: now,
+      })
+      .eq('id', linkId);
   },
 
   async declinePartnerLink(linkId: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.declinePartnerLink(linkId);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client
-        .from('partner_links')
-        .delete()
-        .eq('id', linkId);
+    const client = requireSupabase();
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.declinePartnerLink(linkId);
-        throw error;
+    // 1. Call server function
+    const { error: rpcErr } = await client.rpc('decline_partner_connection', { p_link_id: linkId });
+    if (rpcErr) {
+      if (import.meta.env.DEV) {
+        console.warn('[HerCycle DB] decline_partner_connection RPC error, falling back to delete:', rpcErr);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.declinePartnerLink(linkId);
-      throw e;
     }
+
+    // 2. Direct clean up
+    await client.from('partner_links').delete().eq('id', linkId);
+    await client.from('partner_connections').delete().eq('id', linkId);
   },
 
   async togglePausePartnerLink(linkId: string, isPaused: boolean): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.togglePausePartnerLink(linkId, isPaused);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client
-        .from('partner_links')
-        .update({ is_paused: isPaused })
-        .eq('id', linkId);
+    const client = requireSupabase();
+    const { error } = await client
+      .from('partner_links')
+      .update({ is_paused: isPaused })
+      .eq('id', linkId);
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.togglePausePartnerLink(linkId, isPaused);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] togglePausePartnerLink error:', error);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.togglePausePartnerLink(linkId, isPaused);
-      throw e;
+      throw error;
     }
   },
 
@@ -596,151 +450,140 @@ export const db = {
     await this.declinePartnerLink(linkId);
   },
 
-  // 8. Sharing Permissions
+  // 7. Sharing Permissions
   async getSharingPermissions(linkId: string): Promise<SharingPermissionsMap> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getSharingPermissions(linkId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('sharing_permissions')
-        .select('permission_name, enabled')
-        .eq('link_id', linkId);
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('sharing_permissions')
+      .select('permission_name, enabled')
+      .eq('link_id', linkId);
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getSharingPermissions(linkId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getSharingPermissions error:', error);
       }
-
-      const map: Partial<SharingPermissionsMap> = {};
-      (data || []).forEach(row => {
-        map[row.permission_name as PermissionKey] = row.enabled;
-      });
-
-      return {
-        cycle_phase: map.cycle_phase ?? true,
-        cycle_day: map.cycle_day ?? true,
-        period_status: map.period_status ?? true,
-        estimated_next_period: map.estimated_next_period ?? true,
-        mood: map.mood ?? true,
-        energy: map.energy ?? true,
-        symptoms: map.symptoms ?? false,
-        flow: map.flow ?? false,
-        sleep: map.sleep ?? false,
-        notes: false,
-        weight: false,
-      };
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getSharingPermissions(linkId);
-      throw e;
+      throw error;
     }
+
+    const map: Partial<SharingPermissionsMap> = {};
+    (data || []).forEach(row => {
+      map[row.permission_name as PermissionKey] = row.enabled;
+    });
+
+    return {
+      cycle_phase: map.cycle_phase ?? true,
+      cycle_day: map.cycle_day ?? true,
+      period_status: map.period_status ?? true,
+      estimated_next_period: map.estimated_next_period ?? true,
+      mood: map.mood ?? false,
+      energy: map.energy ?? false,
+      symptoms: map.symptoms ?? false,
+      flow: map.flow ?? false,
+      sleep: map.sleep ?? false,
+      notes: false,
+      weight: false,
+    };
   },
 
   async updateSharingPermission(linkId: string, permission: PermissionKey, enabled: boolean): Promise<void> {
     if (permission === 'notes' || permission === 'weight') return;
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.updateSharingPermission(linkId, permission, enabled);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client
-        .from('sharing_permissions')
-        .upsert(
-          {
-            link_id: linkId,
-            permission_name: permission,
-            enabled,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'link_id,permission_name' }
-        );
+    const client = requireSupabase();
+    const { error } = await client
+      .from('sharing_permissions')
+      .upsert(
+        {
+          link_id: linkId,
+          permission_name: permission,
+          enabled,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'link_id,permission_name' }
+      );
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.updateSharingPermission(linkId, permission, enabled);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] updateSharingPermission error:', error);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.updateSharingPermission(linkId, permission, enabled);
-      throw e;
+      throw error;
     }
   },
 
   async applySharingPreset(linkId: string, preset: 'basic' | 'standard' | 'custom'): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.applySharingPreset(linkId, preset);
-    }
-    try {
-      const perms: Record<PermissionKey, boolean> = {
-        cycle_phase: true,
-        cycle_day: true,
-        period_status: true,
-        estimated_next_period: true,
-        mood: preset === 'standard',
-        energy: preset === 'standard',
-        symptoms: false,
-        flow: false,
-        sleep: false,
-        notes: false,
-        weight: false,
-      };
+    const perms: Record<PermissionKey, boolean> = {
+      cycle_phase: true,
+      cycle_day: true,
+      period_status: true,
+      estimated_next_period: true,
+      mood: preset === 'standard',
+      energy: preset === 'standard',
+      symptoms: false,
+      flow: false,
+      sleep: false,
+      notes: false,
+      weight: false,
+    };
 
-      const updates = Object.entries(perms).map(([key, val]) => ({
-        link_id: linkId,
-        permission_name: key,
-        enabled: val,
-        updated_at: new Date().toISOString(),
-      }));
+    const updates = Object.entries(perms).map(([key, val]) => ({
+      link_id: linkId,
+      permission_name: key,
+      enabled: val,
+      updated_at: new Date().toISOString(),
+    }));
 
-      const client = supabase;
-      const { error } = await client
-        .from('sharing_permissions')
-        .upsert(updates, { onConflict: 'link_id,permission_name' });
+    const client = requireSupabase();
+    const { error } = await client
+      .from('sharing_permissions')
+      .upsert(updates, { onConflict: 'link_id,permission_name' });
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.applySharingPreset(linkId, preset);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] applySharingPreset error:', error);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.applySharingPreset(linkId, preset);
-      throw e;
+      throw error;
     }
   },
 
-  // 9. Masked Partner View
+  // 8. Masked Partner View
   async getPartnerView(partnerId: string): Promise<any> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getPartnerView(partnerId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('partner_view')
-        .select('*')
-        .eq('partner_id', partnerId)
-        .maybeSingle();
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('partner_view')
+      .select('*')
+      .eq('partner_id', partnerId)
+      .maybeSingle();
 
-      if (error) {
-        if (isMissingSchemaError(error)) {
-          return standaloneDb.getPartnerView(partnerId);
-        }
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getPartnerView error:', error);
       }
-      if (!data) return standaloneDb.getPartnerView(partnerId);
-
-      return {
-        ...data,
-        isConnected: data.status === 'approved',
-        isPaused: Boolean(data.is_paused),
-        notes: null,
-        weight_kg: null,
-      };
-    } catch (err: any) {
-      if (isMissingSchemaError(err)) {
-        return standaloneDb.getPartnerView(partnerId);
-      }
-      throw err;
+      throw error;
     }
+
+    if (!data) {
+      // Check if there is an approved link in partner_links
+      const link = await this.getPartnerLink(partnerId, 'partner');
+      if (link && (link.status === 'approved')) {
+        return {
+          link_id: link.id,
+          partner_id: partnerId,
+          woman_id: link.woman_id,
+          woman_name: link.woman_name || 'Partner',
+          status: 'approved',
+          isConnected: true,
+          isPaused: Boolean(link.is_paused),
+          permissions: {},
+        };
+      }
+      return null;
+    }
+
+    return {
+      ...data,
+      isConnected: data.status === 'approved',
+      isPaused: Boolean(data.is_paused),
+      notes: null,
+      weight_kg: null,
+    };
   },
 
   async getPartnerViewData(partnerId: string): Promise<any> {
@@ -753,21 +596,9 @@ export const db = {
   },
 
   async updatePeriodLog(id: string, updates: Partial<PeriodLog>): Promise<void> {
-    const client = isSupabaseConfigured && supabase ? supabase : null;
-    if (client) {
-      try {
-        const { error } = await client.from('period_logs').update(updates).eq('id', id);
-        if (error && !isMissingSchemaError(error)) throw error;
-        if (!error) return;
-      } catch (e) {
-        if (!isMissingSchemaError(e)) throw e;
-      }
-    }
-    const logs = await standaloneDb.getPeriodLogs(updates.user_id || '');
-    const existing = logs.find(l => l.id === id);
-    if (existing) {
-      await standaloneDb.savePeriodLog({ ...existing, ...updates });
-    }
+    const client = requireSupabase();
+    const { error } = await client.from('period_logs').update(updates).eq('id', id);
+    if (error) throw error;
   },
 
   async togglePausePartner(linkId: string, isPaused: boolean): Promise<void> {
@@ -782,40 +613,18 @@ export const db = {
     if (typeof permsOrPreset === 'string') {
       return this.applySharingPreset(linkId, permsOrPreset);
     }
-    if (!isSupabaseConfigured || !supabase) {
-      for (const [key, val] of Object.entries(permsOrPreset)) {
-        await standaloneDb.updateSharingPermission(linkId, key as PermissionKey, Boolean(val));
-      }
-      return;
-    }
-    try {
-      const updates = Object.entries(permsOrPreset).map(([key, val]) => ({
-        link_id: linkId,
-        permission_name: key,
-        enabled: Boolean(val),
-        updated_at: new Date().toISOString(),
-      }));
-      const client = supabase;
-      const { error } = await client.from('sharing_permissions').upsert(updates, { onConflict: 'link_id,permission_name' });
-      if (error && isMissingSchemaError(error)) {
-        for (const [key, val] of Object.entries(permsOrPreset)) {
-          await standaloneDb.updateSharingPermission(linkId, key as PermissionKey, Boolean(val));
-        }
-        return;
-      }
-      if (error) throw error;
-    } catch (e) {
-      if (isMissingSchemaError(e)) {
-        for (const [key, val] of Object.entries(permsOrPreset)) {
-          await standaloneDb.updateSharingPermission(linkId, key as PermissionKey, Boolean(val));
-        }
-        return;
-      }
-      throw e;
-    }
+    const updates = Object.entries(permsOrPreset).map(([key, val]) => ({
+      link_id: linkId,
+      permission_name: key,
+      enabled: Boolean(val),
+      updated_at: new Date().toISOString(),
+    }));
+    const client = requireSupabase();
+    const { error } = await client.from('sharing_permissions').upsert(updates, { onConflict: 'link_id,permission_name' });
+    if (error) throw error;
   },
 
-  // 10. Data Export (JSON & CSV)
+  // 9. Data Export (JSON & CSV)
   async exportAllDataJson(userId: string): Promise<string> {
     const profile = await this.getProfile(userId);
     const cycle = await this.getCycleProfile(userId);
@@ -833,133 +642,90 @@ export const db = {
     return header + rows;
   },
 
-  // 11. Cascading Account Deletion
+  // 10. Account Deletion
   async deleteUserAccount(userId?: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      if (!userId) return;
-      return standaloneDb.deleteUserAccount(userId);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client.rpc('delete_user_account');
-      if (error) {
-        if (isMissingSchemaError(error) && userId) return standaloneDb.deleteUserAccount(userId);
-        throw error;
+    const client = requireSupabase();
+    const { error } = await client.rpc('delete_user_account');
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] delete_user_account error:', error);
       }
-    } catch (e) {
-      if (isMissingSchemaError(e) && userId) return standaloneDb.deleteUserAccount(userId);
-      throw e;
+      throw error;
     }
   },
 
-  // 12. Pending Partner Requests
+  // 11. Pending Partner Requests
   async getPendingPartnerRequests(womanUserId: string): Promise<PartnerConnection[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getPendingPartnerRequests(womanUserId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('partner_links')
-        .select(`
-          *,
-          partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
-        `)
-        .eq('woman_id', womanUserId)
-        .eq('status', 'pending');
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('partner_links')
+      .select(`
+        *,
+        partner:profiles!partner_links_partner_id_fkey(full_name, avatar_url, email)
+      `)
+      .eq('woman_id', womanUserId)
+      .eq('status', 'pending');
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getPendingPartnerRequests(womanUserId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getPendingPartnerRequests error:', error);
       }
-      return (data || []).map((row: any) => ({
-        ...row,
-        woman_user_id: row.woman_id,
-        partner_user_id: row.partner_id,
-        partner_name: row.partner?.full_name,
-        partner_avatar_url: row.partner?.avatar_url,
-        partner_email: row.partner?.email,
-      }));
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getPendingPartnerRequests(womanUserId);
-      throw e;
+      throw error;
     }
+
+    return (data || []).map((row: any) => ({
+      ...row,
+      woman_user_id: row.woman_id,
+      partner_user_id: row.partner_id,
+      partner_name: row.partner?.full_name || 'Partner',
+      partner_avatar_url: row.partner?.avatar_url || null,
+      partner_email: row.partner?.email || '',
+    }));
   },
 
-  async approvePartnerConnection(connectionId: string, womanUserId: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.approvePartnerConnection(connectionId, womanUserId);
-    }
-    try {
-      await this.approvePartnerLink(connectionId);
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.approvePartnerConnection(connectionId, womanUserId);
-      throw e;
-    }
+  async approvePartnerConnection(connectionId: string, _womanUserId?: string): Promise<void> {
+    await this.approvePartnerLink(connectionId);
   },
 
-  async declinePartnerConnection(connectionId: string, womanUserId: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.declinePartnerConnection(connectionId, womanUserId);
-    }
-    try {
-      await this.declinePartnerLink(connectionId);
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.declinePartnerConnection(connectionId, womanUserId);
-      throw e;
-    }
+  async declinePartnerConnection(connectionId: string, _womanUserId?: string): Promise<void> {
+    await this.declinePartnerLink(connectionId);
   },
 
-  // 13. Notifications
+  // 12. Notifications
   async getNotifications(userId: string): Promise<AppNotification[]> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.getNotifications(userId);
-    }
-    try {
-      const client = supabase;
-      const { data, error } = await client
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-      if (error) {
-        if (isMissingSchemaError(error)) return standaloneDb.getNotifications(userId);
-        throw error;
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] getNotifications error:', error);
       }
-      return (data || []) as AppNotification[];
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.getNotifications(userId);
-      throw e;
+      return [];
     }
+    return (data || []) as AppNotification[];
   },
 
   async markNotificationRead(id: string): Promise<void> {
-    if (!isSupabaseConfigured || !supabase) {
-      return standaloneDb.markNotificationRead(id);
-    }
-    try {
-      const client = supabase;
-      const { error } = await client.from('notifications').update({ read: true }).eq('id', id);
-      if (error && !isMissingSchemaError(error)) throw error;
-    } catch (e) {
-      if (isMissingSchemaError(e)) return standaloneDb.markNotificationRead(id);
-      throw e;
+    const client = requireSupabase();
+    const { error } = await client.from('notifications').update({ read: true }).eq('id', id);
+    if (error && import.meta.env.DEV) {
+      console.warn('[HerCycle DB] markNotificationRead error:', error);
     }
   },
 
-  // 14. Password Management
-  async updatePassword(userId: string, currentPass: string, newPass: string): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.auth.updateUser({ password: newPass });
-      if (error) {
-        if (isMissingSchemaError(error)) {
-          return standaloneDb.updatePassword(userId, currentPass, newPass);
-        }
-        throw error;
+  // 13. Password Management
+  async updatePassword(_userId: string, _currentPass: string, newPass: string): Promise<void> {
+    const client = requireSupabase();
+    const { error } = await client.auth.updateUser({ password: newPass });
+    if (error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] updatePassword error:', error);
       }
-      return;
+      throw error;
     }
-    return standaloneDb.updatePassword(userId, currentPass, newPass);
   },
 };

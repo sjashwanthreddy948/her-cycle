@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, UserRole } from '../types/database';
 import { db } from '../lib/db';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { standaloneDb, StandaloneUserRecord } from '../lib/standaloneDb';
-import { normalizePartnerCode, looksLikePartnerCode } from '../lib/codeUtils';
+import { normalizePartnerCode } from '../lib/codeUtils';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -38,101 +37,50 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const LOCAL_SESSION_KEY = 'hercycle_session_token';
-const STANDALONE_USER_KEY = 'hercycle_standalone_current_user_id';
-
-const isSupabaseFallbackError = (err: any): boolean => {
-  if (!err) return false;
-  const msg = (err.message || '').toLowerCase();
-  const code = (err.code || '').toLowerCase();
-  return (
-    msg.includes('api key') ||
-    msg.includes('jwt') ||
-    msg.includes('schema cache') ||
-    msg.includes('could not find the table') ||
-    msg.includes('email not confirmed') ||
-    msg.includes('failed to fetch') ||
-    code === 'pgrst205' ||
-    code === '42p01'
-  );
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
-  // Helper to establish and record single active session
-  const registerNewSession = useCallback(async (userId: string) => {
-    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem(LOCAL_SESSION_KEY, sessionId);
-    await db.upsertActiveSession(userId, sessionId);
-    return sessionId;
-  }, []);
-
-  // Check single active session against server or local storage
-  const verifyActiveSession = useCallback(async (currentUserId: string) => {
-    try {
-      const currentLocalSession = localStorage.getItem(LOCAL_SESSION_KEY);
-      if (!currentLocalSession) return;
-
-      const serverSessionId = await db.getActiveSession(currentUserId);
-      if (serverSessionId && serverSessionId !== currentLocalSession) {
-        // Another device logged in! Sign out immediately
-        console.warn('Single-session violation: account opened on another device.');
-        localStorage.removeItem(LOCAL_SESSION_KEY);
-        localStorage.removeItem(STANDALONE_USER_KEY);
-        if (isSupabaseConfigured && supabase) {
-          await supabase.auth.signOut();
-        }
-        setUser(null);
-        setSessionError('You were signed out because your account was opened on another device.');
-      }
-    } catch (err) {
-      console.debug('Session check error:', err);
-    }
-  }, []);
-
-  // Initialize Auth Session
+  // Initialize Real Supabase Auth Session
   useEffect(() => {
+    let isMounted = true;
+
     async function initSession() {
       try {
-        if (isSupabaseConfigured && supabase) {
-          const { data: { session }, error } = await supabase.auth.getSession();
-          if (error) throw error;
-
-          if (session?.user) {
-            const profile = await db.getProfile(session.user.id);
-            if (profile) {
-              setUser(profile);
-              const localSession = localStorage.getItem(LOCAL_SESSION_KEY);
-              if (!localSession) {
-                await registerNewSession(session.user.id);
-              } else {
-                await verifyActiveSession(session.user.id);
-              }
-            }
+        if (!isSupabaseConfigured || !supabase) {
+          if (import.meta.env.DEV) {
+            console.error('[HerCycle Auth] Supabase is not configured.');
           }
-        } else {
-          // Standalone browser mode
-          const currentUserId = localStorage.getItem(STANDALONE_USER_KEY);
-          if (currentUserId) {
-            const profile = await standaloneDb.getProfile(currentUserId);
-            if (profile) {
-              setUser(profile);
-              const localSession = localStorage.getItem(LOCAL_SESSION_KEY);
-              if (!localSession) {
-                await registerNewSession(currentUserId);
-              } else {
-                await verifyActiveSession(currentUserId);
-              }
+          return;
+        }
+
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          if (import.meta.env.DEV) {
+            console.error('[HerCycle Auth] getSession error:', error);
+          }
+          throw error;
+        }
+
+        if (session?.user && isMounted) {
+          const profile = await db.getProfile(session.user.id);
+          if (profile && isMounted) {
+            setUser(profile);
+          } else if (isMounted) {
+            if (import.meta.env.DEV) {
+              console.warn('[HerCycle Auth] Session user ID has no profile row:', session.user.id);
             }
           }
         }
-      } catch (e) {
-        console.error('Auth initialization error:', e);
+      } catch (e: any) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle Auth] Initialization exception:', e);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -140,119 +88,103 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (isSupabaseConfigured && supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          const profile = await db.getProfile(session.user.id);
-          setUser(profile);
+        if (import.meta.env.DEV) {
+          console.log('[HerCycle Auth] onAuthStateChange:', event, session?.user?.id);
+        }
+
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+          try {
+            const profile = await db.getProfile(session.user.id);
+            if (isMounted && profile) {
+              setUser(profile);
+            }
+          } catch (err) {
+            if (import.meta.env.DEV) {
+              console.error('[HerCycle Auth] Error loading profile after auth change:', err);
+            }
+          }
         } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          localStorage.removeItem(LOCAL_SESSION_KEY);
+          if (isMounted) {
+            setUser(null);
+          }
         }
       });
 
       return () => {
+        isMounted = false;
         subscription.unsubscribe();
       };
     }
-  }, [registerNewSession, verifyActiveSession]);
-
-  // Single-active-session listener: checks every 60s and on tab focus
-  useEffect(() => {
-    if (!user) return;
-
-    const interval = setInterval(() => {
-      verifyActiveSession(user.id);
-    }, 60000);
-
-    const handleFocus = () => {
-      verifyActiveSession(user.id);
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleFocus);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleFocus);
+      isMounted = false;
     };
-  }, [user, verifyActiveSession]);
+  }, []);
 
   const login = async (email: string, pass: string): Promise<UserProfile> => {
     setIsLoading(true);
     setSessionError(null);
-    try {
-      const cleanEmail = email.trim().toLowerCase();
 
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password: pass,
-          });
-
-          if (error) {
-            if (isSupabaseFallbackError(error)) {
-              // Fallback to standalone mode below
-            } else if (error.message.toLowerCase().includes('invalid login credentials')) {
-              throw new Error('Invalid email or password. Please verify your credentials.');
-            } else {
-              throw new Error(error.message);
-            }
-          } else if (data?.user) {
-            const profile = await db.getProfile(data.user.id);
-            if (!profile) {
-              // Fallback if profile row is not found or schema missing
-              throw new Error('Profile not found. Please contact support.');
-            }
-
-            await registerNewSession(data.user.id);
-            setUser(profile);
-            return profile;
-          }
-        } catch (err: any) {
-          if (!isSupabaseFallbackError(err)) {
-            throw err;
-          }
-        }
-      }
-
-      // Standalone Mode Login
-      const found = standaloneDb.findUserByEmail(cleanEmail);
-      if (!found || found.password_hash !== pass) {
-        if (looksLikePartnerCode(pass) || looksLikePartnerCode(email)) {
-          throw new Error("It looks like you entered a Partner Invite Code as your password! Please click the 'Partner Invite Code' tab to connect directly.");
-        }
-        throw new Error('Invalid email or password. Please verify your credentials.');
-      }
-      localStorage.setItem(STANDALONE_USER_KEY, found.id);
-      await registerNewSession(found.id);
-      const { password_hash: _password_hash, ...profile } = found;
-      setUser(profile);
-      return profile;
-    } finally {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !pass) {
       setIsLoading(false);
+      throw new Error('Please enter both email and password.');
     }
-  };
 
-  const connectWithPartnerCode = async (params: {
-    code: string;
-    fullName?: string;
-    email?: string;
-    password?: string;
-  }): Promise<UserProfile> => {
-    setIsLoading(true);
-    setSessionError(null);
+    if (!isSupabaseConfigured || !supabase) {
+      setIsLoading(false);
+      throw new Error('Supabase client is not configured. Please check environment variables.');
+    }
+
     try {
-      const cleanCode = normalizePartnerCode(params.code);
-      const { profile } = await db.redeemAndCreatePartner(
-        cleanCode,
-        params.fullName,
-        params.email,
-        params.password
-      );
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: pass,
+      });
 
-      localStorage.setItem(STANDALONE_USER_KEY, profile.id);
-      await registerNewSession(profile.id);
+      if (error) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle Auth] signInWithPassword error:', error);
+        }
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          throw new Error('Invalid email or password. Please verify your credentials.');
+        } else if (error.message.toLowerCase().includes('email not confirmed')) {
+          throw new Error('Please verify your email before signing in.');
+        }
+        throw new Error(error.message);
+      }
+
+      if (!data?.user) {
+        throw new Error('Login succeeded but no user data was returned. Please try again.');
+      }
+
+      const profile = await db.getProfile(data.user.id);
+      if (!profile) {
+        // Fallback: create profile row using auth user metadata if database trigger did not run
+        const newProfile: UserProfile = {
+          id: data.user.id,
+          email: cleanEmail,
+          full_name: data.user.user_metadata?.full_name || cleanEmail.split('@')[0],
+          role: (data.user.user_metadata?.role as UserRole) || 'woman',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert(newProfile);
+
+        if (profileError) {
+          if (import.meta.env.DEV) {
+            console.error('[HerCycle Auth] Profile creation error after login:', profileError);
+          }
+          throw new Error(`Profile not found and could not be created: ${profileError.message}`);
+        }
+
+        setUser(newProfile);
+        return newProfile;
+      }
+
       setUser(profile);
       return profile;
     } finally {
@@ -272,152 +204,166 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     lastPeriodStart?: string;
     goals?: string[];
   }): Promise<UserProfile> => {
-    if (!params.password || params.password.length < 10) {
-      throw new Error('Password must be at least 10 characters for account security.');
+    if (!params.password || params.password.length < 8) {
+      throw new Error('Password must be at least 8 characters for account security.');
+    }
+
+    const cleanEmail = params.email.trim().toLowerCase();
+    if (!cleanEmail || !params.fullName.trim()) {
+      throw new Error('Please provide your full name and a valid email address.');
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase client is not configured. Please check environment variables.');
     }
 
     setIsLoading(true);
     setSessionError(null);
+
     try {
-      const cleanEmail = params.email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: params.password,
+        options: {
+          data: {
+            full_name: params.fullName.trim(),
+            role: params.role,
+          },
+        },
+      });
 
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data, error } = await supabase.auth.signUp({
-            email: cleanEmail,
-            password: params.password,
-            options: {
-              data: {
-                full_name: params.fullName.trim(),
-                role: params.role,
-              },
-            },
-          });
-
-          if (error) {
-            if (isSupabaseFallbackError(error)) {
-              // Fallback to standalone mode below
-            } else if (
-              error.message.toLowerCase().includes('already registered') ||
-              error.message.toLowerCase().includes('already exists') ||
-              error.status === 422
-            ) {
-              throw new Error('An account with this email already exists. Please log in.');
-            } else {
-              throw new Error(error.message);
-            }
-          } else if (data?.user) {
-            const userId = data.user.id;
-
-            const newProfile: UserProfile = {
-              id: userId,
-              email: cleanEmail,
-              full_name: params.fullName.trim(),
-              role: params.role,
-              age: params.age,
-              avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : undefined),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            };
-
-            const { error: profileError } = await supabase
-              .from('profiles')
-              .upsert(newProfile);
-
-            if (profileError) {
-              if (isSupabaseFallbackError(profileError)) {
-                throw profileError;
-              }
-              if (profileError.code === '23505' || profileError.message.includes('unique')) {
-                throw new Error('An account with this email already exists. Please log in.');
-              }
-              throw profileError;
-            }
-
-            if (params.role === 'woman') {
-              await db.updateCycleProfile(userId, {
-                average_cycle_length: params.cycleLength || 28,
-                average_period_length: params.periodLength || 5,
-                last_period_start: params.lastPeriodStart || null,
-              });
-
-              if (params.lastPeriodStart) {
-                await db.savePeriodLog({
-                  user_id: userId,
-                  start_date: params.lastPeriodStart,
-                  flow: 'medium',
-                  notes: 'Registered initial period',
-                });
-              }
-            }
-
-            await registerNewSession(userId);
-            setUser(newProfile);
-            return newProfile;
-          }
-        } catch (err: any) {
-          if (!isSupabaseFallbackError(err)) {
-            throw err;
-          }
+      if (error) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle Auth] signUp error:', error);
         }
+        if (
+          error.message.toLowerCase().includes('already registered') ||
+          error.message.toLowerCase().includes('already exists') ||
+          error.status === 422
+        ) {
+          throw new Error('An account with this email already exists. Please log in.');
+        }
+        throw new Error(error.message);
       }
 
-      // Standalone Mode Registration
-      const existing = standaloneDb.findUserByEmail(cleanEmail);
-      if (existing) {
-        throw new Error('An account with this email already exists. Please log in.');
+      if (!data?.user) {
+        throw new Error('Registration failed to create user. Please try again.');
       }
 
-      const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const record: StandaloneUserRecord = {
+      const userId = data.user.id;
+
+      // Check whether email confirmation is required and user is unconfirmed
+      if (!data.session && !data.user.confirmed_at && !data.user.email_confirmed_at) {
+        throw new Error('Please verify your email before signing in.');
+      }
+
+      // Upsert profile in Supabase: profiles.id MUST equal auth.users.id
+      const newProfile: UserProfile = {
         id: userId,
         email: cleanEmail,
         full_name: params.fullName.trim(),
         role: params.role,
         age: params.age,
         avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : undefined),
-        password_hash: params.password,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      standaloneDb.saveUser(record);
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert(newProfile);
+
+      if (profileError) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle Auth] Profile upsert error on signup:', profileError);
+        }
+        throw new Error(`Profile creation failed: ${profileError.message}`);
+      }
 
       if (params.role === 'woman') {
-        await standaloneDb.updateCycleProfile(userId, {
-          average_cycle_length: params.cycleLength || 28,
-          average_period_length: params.periodLength || 5,
-          last_period_start: params.lastPeriodStart || null,
-        });
-
-        if (params.lastPeriodStart) {
-          await standaloneDb.savePeriodLog({
-            user_id: userId,
-            start_date: params.lastPeriodStart,
-            flow: 'medium',
-            notes: 'Registered initial period',
+        try {
+          await db.updateCycleProfile(userId, {
+            average_cycle_length: params.cycleLength || 28,
+            average_period_length: params.periodLength || 5,
+            last_period_start: params.lastPeriodStart || null,
           });
+
+          if (params.lastPeriodStart) {
+            await db.savePeriodLog({
+              user_id: userId,
+              start_date: params.lastPeriodStart,
+              flow: 'medium',
+              notes: 'Registered initial period',
+            });
+          }
+        } catch (cycleErr) {
+          if (import.meta.env.DEV) {
+            console.warn('[HerCycle Auth] Cycle initialization warning:', cycleErr);
+          }
         }
       }
 
-      localStorage.setItem(STANDALONE_USER_KEY, userId);
-      await registerNewSession(userId);
-      const { password_hash: _password_hash, ...profile } = record;
-      setUser(profile);
-      return profile;
+      setUser(newProfile);
+      return newProfile;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const connectWithPartnerCode = async (params: {
+    code: string;
+    fullName?: string;
+    email?: string;
+    password?: string;
+  }): Promise<UserProfile> => {
+    setIsLoading(true);
+    setSessionError(null);
+    try {
+      const cleanCode = normalizePartnerCode(params.code);
+      if (!cleanCode) {
+        throw new Error('Please enter a valid 6-digit partner connection code.');
+      }
+
+      // If user is currently logged in
+      if (user) {
+        if (user.role !== 'partner') {
+          throw new Error('Only partner accounts can enter a connection code.');
+        }
+        await db.redeemPartnerCode(cleanCode, user.id);
+        return user;
+      }
+
+      // If credentials provided, register and connect
+      if (params.email && params.password) {
+        const partnerProfile = await register({
+          email: params.email,
+          password: params.password,
+          fullName: params.fullName || 'Partner',
+          role: 'partner',
+        });
+        await db.redeemPartnerCode(cleanCode, partnerProfile.id);
+        return partnerProfile;
+      }
+
+      throw new Error('Please log in or register a partner account to connect with this code.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = async (reason?: string) => {
-    localStorage.removeItem(LOCAL_SESSION_KEY);
-    localStorage.removeItem(STANDALONE_USER_KEY);
-    if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
+    try {
+      if (isSupabaseConfigured && supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.warn('[HerCycle Auth] Sign out error:', e);
+      }
+    } finally {
+      setUser(null);
+      if (reason) setSessionError(reason);
     }
-    setUser(null);
-    if (reason) setSessionError(reason);
   };
 
   const updateCurrentUserProfile = async (updates: Partial<UserProfile>) => {
@@ -427,19 +373,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return updated;
   };
 
-  const changePassword = async (currentPass: string, newPass: string): Promise<void> => {
+  const changePassword = async (_currentPass: string, newPass: string): Promise<void> => {
     if (!user) throw new Error('Not authenticated');
     if (!newPass || newPass.length < 8) {
       throw new Error('New password must be at least 8 characters.');
     }
-    await db.updatePassword(user.id, currentPass, newPass);
+    await db.updatePassword(user.id, _currentPass, newPass);
   };
 
   const resetPasswordEmail = async (emailToReset: string): Promise<void> => {
     const cleanEmail = emailToReset.trim().toLowerCase();
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
-      if (error && !isSupabaseFallbackError(error)) {
+      if (error) {
         throw new Error(error.message);
       }
     }
@@ -456,7 +402,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isLoading,
-        isConfigured: true,
+        isConfigured: isSupabaseConfigured,
         sessionError,
         login,
         connectWithPartnerCode,

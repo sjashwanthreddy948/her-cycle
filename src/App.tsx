@@ -108,7 +108,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       </div>
 
       {/* Responsive Main Container */}
-      <main className="flex-1 w-full max-w-5xl mx-auto px-2 sm:px-4 pb-12 sm:pb-6">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-2 sm:px-4 pb-28 md:pb-8">
         {children}
       </main>
 
