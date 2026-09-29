@@ -517,36 +517,39 @@ export const standaloneDb = {
     if (!record) {
       attempts.push({ partner_id: partnerId, time: now });
       save(CODE_ATTEMPTS_KEY, attempts);
-      throw new Error('Code not found. Please verify the 6-digit code from your partner.');
+      throw new Error("That connection code isn't valid. Please check the code and try again.");
     }
 
     // Check expiration
     if (new Date(record.expires_at).getTime() <= now) {
       attempts.push({ partner_id: partnerId, time: now });
       save(CODE_ATTEMPTS_KEY, attempts);
-      throw new Error('This connection code has expired. Please ask your partner to tap "Generate New Code".');
+      throw new Error("This connection code has expired. Ask your partner to generate a new one.");
     }
 
     // Check single-use
     if (record.used_at) {
       attempts.push({ partner_id: partnerId, time: now });
       save(CODE_ATTEMPTS_KEY, attempts);
-      throw new Error('This code has already been used.');
+      throw new Error("This connection code has already been used.");
     }
 
     // Self-linking prevention
     if (record.woman_user_id === partnerId) {
-      throw new Error('You cannot connect your account to itself.');
+      throw new Error("You can't connect your account to your own account.");
     }
 
     const connections = load<PartnerConnection[]>(PARTNER_CONNECTIONS_KEY, []);
 
     // Check conflicting active approved connections
     if (connections.some(c => c.partner_user_id === partnerId && c.status === 'approved')) {
-      throw new Error('You are already connected with a partner.');
+      throw new Error("Your accounts are already connected.");
+    }
+    if (connections.some(c => c.partner_user_id === partnerId && c.status === 'pending')) {
+      throw new Error("A connection request is already waiting for approval.");
     }
     if (connections.some(c => c.woman_user_id === record.woman_user_id && c.status === 'approved')) {
-      throw new Error('This woman account is already connected with a partner.');
+      throw new Error("This woman's account is already connected to a partner.");
     }
 
     // Mark code as used immediately
@@ -600,7 +603,7 @@ export const standaloneDb = {
     );
 
     if (!record) {
-      throw new Error('Code not found. Please verify the 6-digit code with your partner.');
+      throw new Error("That connection code isn't valid. Please check the code and try again.");
     }
 
     const now = Date.now();

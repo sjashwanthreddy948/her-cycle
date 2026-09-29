@@ -29,15 +29,25 @@ export const PartnerDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    let timer: ReturnType<typeof setTimeout>;
+    async function load(showLoading = true) {
       if (user) {
-        setLoading(true);
+        if (showLoading) setLoading(true);
         const data = await db.getPartnerViewData(user.id);
         setPartnerData(data);
         setLoading(false);
+
+        // If pending approval, poll every 4 seconds so approval is detected without refresh
+        if (data?.isPending) {
+          timer = setTimeout(() => load(false), 4000);
+        }
       }
     }
-    load();
+    load(true);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [user]);
 
   if (loading) {

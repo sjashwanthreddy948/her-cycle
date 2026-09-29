@@ -38,11 +38,19 @@ export async function hashPartnerCode(code: string): Promise<string> {
   return `h_${Math.abs(hash).toString(16)}`;
 }
 
+export function normalizeSixDigitCode(input: string): string {
+  if (!input) return '';
+  return input.replace(/\D/g, '').trim();
+}
+
 export function normalizePartnerCode(input: string): string {
   if (!input) return '';
+  // If numeric or 6 digits, strictly extract digits
+  const digitsOnly = input.replace(/\D/g, '').trim();
+  if (digitsOnly.length === 6) {
+    return digitsOnly;
+  }
   let clean = input.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
-  
-  // If numeric 6-digit code
   if (/^\d{6}$/.test(clean)) {
     return clean;
   }

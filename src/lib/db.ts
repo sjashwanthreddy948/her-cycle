@@ -12,7 +12,7 @@ import {
 } from '../types/database';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { standaloneDb } from './standaloneDb';
-import { normalizePartnerCode } from './codeUtils';
+import { normalizePartnerCode, normalizeSixDigitCode } from './codeUtils';
 
 function isMissingSchemaError(err: any): boolean {
   if (!err) return false;
@@ -358,39 +358,105 @@ export const db = {
       const client = supabase;
       const { data, error } = await client.rpc('generate_partner_code');
       if (error) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle Code Gen Error]', error);
+        }
         if (isMissingSchemaError(error) && womanId) return standaloneDb.generatePartnerCode(womanId);
-        throw error;
+        throw new Error('Unable to generate connection code. Please try again.');
       }
-      return data as string;
-    } catch (e) {
+
+      const generatedCode = String(data).trim();
+      if (!generatedCode || !/^\d{6}$/.test(generatedCode)) {
+        throw new Error('Unable to generate connection code. Please try again.');
+      }
+
+      if (import.meta.env.DEV) {
+        console.log('[HerCycle Partner Code Generated]', {
+          code: generatedCode,
+          womanId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return generatedCode;
+    } catch (e: any) {
       if (isMissingSchemaError(e) && womanId) return standaloneDb.generatePartnerCode(womanId);
-      throw e;
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle Code Gen Exception]', e);
+      }
+      throw new Error(e.message || 'Unable to generate connection code. Please try again.');
     }
   },
 
   async redeemPartnerCode(code: string, partnerId?: string): Promise<{ success: boolean; link_id: string; status: string }> {
-    const clean = normalizePartnerCode(code);
+    const clean = normalizeSixDigitCode(code) || normalizePartnerCode(code);
+
+    // Developer logging (NEVER log sensitive tokens or passwords)
+    if (import.meta.env.DEV) {
+      console.log('[HerCycle Partner Code Redeem Request]', {
+        enteredCode: code,
+        normalizedCode: clean,
+        partnerId,
+        isSupabase: Boolean(isSupabaseConfigured && supabase),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (!clean || clean.length !== 6) {
+      throw new Error("That connection code isn't valid. Please check the code and try again.");
+    }
+
     if (!isSupabaseConfigured || !supabase) {
-      if (!partnerId) throw new Error('Partner ID is required');
+      if (!partnerId) throw new Error('Your session has expired. Please log in again.');
       return standaloneDb.redeemPartnerCode(partnerId, clean);
     }
+
     try {
       const client = supabase;
-      const { data, error } = await client.rpc('redeem_partner_code', {
-        code_input: clean,
+      // Try validate_partner_connection_code first
+      let res = await client.rpc('validate_partner_connection_code', {
+        entered_code: clean,
       });
-      if (error) {
-        if (isMissingSchemaError(error) && partnerId) {
+
+      if (res.error && res.error.message && (res.error.message.includes('function') || res.error.code === '42883')) {
+        res = await client.rpc('redeem_partner_code', {
+          code_input: clean,
+        });
+      }
+
+      if (res.error) {
+        if (import.meta.env.DEV) {
+          console.error('[HerCycle Partner DB Error]', {
+            errorCode: res.error.code,
+            errorMessage: res.error.message,
+            errorDetails: res.error.details,
+          });
+        }
+        if (isMissingSchemaError(res.error) && partnerId) {
           return standaloneDb.redeemPartnerCode(partnerId, clean);
         }
-        throw error;
+        const rawMsg = res.error.message || '';
+        const colonIdx = rawMsg.indexOf(':');
+        const cleanMsg = (colonIdx !== -1 && colonIdx < 20) ? rawMsg.slice(colonIdx + 1).trim() : rawMsg;
+        throw new Error(cleanMsg || "We couldn't process the connection right now. Please try again.");
       }
-      return data;
+
+      if (import.meta.env.DEV) {
+        console.log('[HerCycle Partner Code Redeem Success]', res.data);
+      }
+
+      return res.data;
     } catch (err: any) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle Partner Code Redeem Exception]', err);
+      }
       if (partnerId && isMissingSchemaError(err)) {
         return standaloneDb.redeemPartnerCode(partnerId, clean);
       }
-      throw err;
+      const rawMsg = err.message || '';
+      const colonIdx = rawMsg.indexOf(':');
+      const cleanMsg = (colonIdx !== -1 && colonIdx < 20) ? rawMsg.slice(colonIdx + 1).trim() : rawMsg;
+      throw new Error(cleanMsg || "We couldn't process the connection right now. Please try again.");
     }
   },
 

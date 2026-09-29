@@ -110,7 +110,7 @@ async function runTestSuite() {
     await standaloneDb.redeemPartnerCode(strangerId, '000000');
     console.assert(false, 'Should have thrown error on invalid code');
   } catch (err: any) {
-    console.assert(err.message.includes('not found') || err.message.includes('Invalid'), 'Error message should indicate invalid code');
+    console.assert(err.message.toLowerCase().includes('valid') || err.message.toLowerCase().includes('not found'), 'Error message should indicate invalid code');
     console.log(`  ✓ Rejected invalid code: "${err.message}"`);
   }
 

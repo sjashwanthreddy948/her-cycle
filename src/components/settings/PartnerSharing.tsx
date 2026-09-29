@@ -28,6 +28,7 @@ export const PartnerSharing: React.FC = () => {
     updateSharingPermission,
     applyPreset,
     addToast,
+    refresh,
   } = useCycle();
 
   const [copied, setCopied] = useState(false);
@@ -39,6 +40,19 @@ export const PartnerSharing: React.FC = () => {
   const isPending = partnerLink && partnerLink.status === 'pending';
   const isPaused = partnerLink?.is_paused || partnerLink?.status === 'paused';
   const partnerName = partnerLink?.partner_name || 'Alex';
+
+  // Poll for incoming partner connection requests every 4s when a code is active or pending
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (partnerCode?.code || isPending) {
+      timer = setInterval(() => {
+        refresh();
+      }, 4000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [partnerCode, isPending, refresh]);
 
   // Calculate countdown for partner code (15-minute expiration)
   useEffect(() => {
