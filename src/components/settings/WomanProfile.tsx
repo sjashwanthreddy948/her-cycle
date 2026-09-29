@@ -1,7 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useCycle } from '../../context/CycleContext';
 import { db } from '../../lib/db';
+import { calculateAge } from '../../lib/cycleCalculator';
+import { MEDICAL_DISCLAIMER_TEXT } from '../../lib/constants';
 import { 
   LogOut, 
   ChevronRight, 
@@ -13,21 +15,79 @@ import {
   AlertCircle, 
   Calendar, 
   Users, 
-  Eye, 
-  EyeOff 
+  ShieldCheck, 
+  Bell, 
+  FileText, 
+  Info, 
+  UserMinus, 
+  Edit3, 
+  Save, 
+  X, 
+  ShieldAlert, 
+  Cake 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const WomanProfile: React.FC = () => {
   const { user, logout, updateCurrentUserProfile, changePassword, deleteAccount } = useAuth();
-  const { cycleProfile, updateCycleProfile, partnerLink, addToast } = useCycle();
+  const { cycleProfile, updateCycleProfile, partnerLink, disconnectPartner, addToast } = useCycle();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Account editing state
+  const [isEditingAccount, setIsEditingAccount] = useState(false);
+  const [fullName, setFullName] = useState(user?.full_name || '');
+  const [dateOfBirth, setDateOfBirth] = useState(user?.date_of_birth || '');
+  const [accountSaving, setAccountSaving] = useState(false);
+
+  // Keep state in sync with user
+  useEffect(() => {
+    if (user) {
+      setFullName(user.full_name || '');
+      setDateOfBirth(user.date_of_birth || '');
+    }
+  }, [user]);
+
+  // Dynamically calculated age
+  const calculatedAge = calculateAge(user?.date_of_birth);
+  const previewAge = calculateAge(dateOfBirth);
 
   // Cycle Parameters
   const [cycleLength, setCycleLength] = useState<number>(cycleProfile.average_cycle_length || 28);
   const [periodLength, setPeriodLength] = useState<number>(cycleProfile.average_period_length || 5);
   const [isEditingCycle, setIsEditingCycle] = useState(false);
+
+  // Notification Toggles (saved to localStorage for preference retention)
+  const [notifPeriod, setNotifPeriod] = useState<boolean>(() => {
+    return localStorage.getItem('hc_notif_period') !== 'false';
+  });
+  const [notifDaily, setNotifDaily] = useState<boolean>(() => {
+    return localStorage.getItem('hc_notif_daily') !== 'false';
+  });
+  const [notifPartner, setNotifPartner] = useState<boolean>(() => {
+    return localStorage.getItem('hc_notif_partner') !== 'false';
+  });
+
+  const toggleNotifPeriod = () => {
+    const next = !notifPeriod;
+    setNotifPeriod(next);
+    localStorage.setItem('hc_notif_period', String(next));
+    addToast(next ? 'Period reminders enabled' : 'Period reminders muted', 'info');
+  };
+
+  const toggleNotifDaily = () => {
+    const next = !notifDaily;
+    setNotifDaily(next);
+    localStorage.setItem('hc_notif_daily', String(next));
+    addToast(next ? 'Daily log reminder enabled' : 'Daily log reminder muted', 'info');
+  };
+
+  const toggleNotifPartner = () => {
+    const next = !notifPartner;
+    setNotifPartner(next);
+    localStorage.setItem('hc_notif_partner', String(next));
+    addToast(next ? 'Partner notifications enabled' : 'Partner notifications muted', 'info');
+  };
 
   // Change Password State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -39,10 +99,14 @@ export const WomanProfile: React.FC = () => {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
 
-  // Delete Account Confirmation State
+  // Delete Account State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // About modals
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Handle Photo Upload
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,6 +129,34 @@ export const WomanProfile: React.FC = () => {
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleSaveAccount = async () => {
+    if (!fullName.trim()) {
+      addToast('Full name cannot be blank', 'error');
+      return;
+    }
+    if (dateOfBirth) {
+      const parsedAge = calculateAge(dateOfBirth);
+      if (parsedAge === null || parsedAge < 10 || parsedAge > 100) {
+        addToast('Please enter a valid birth date (age between 10 and 100)', 'error');
+        return;
+      }
+    }
+
+    setAccountSaving(true);
+    try {
+      await updateCurrentUserProfile({
+        full_name: fullName.trim(),
+        date_of_birth: dateOfBirth || undefined,
+      });
+      setIsEditingAccount(false);
+      addToast('Account profile updated successfully! ✨', 'success');
+    } catch (err: any) {
+      addToast(err?.message || 'Failed to update profile', 'error');
+    } finally {
+      setAccountSaving(false);
+    }
   };
 
   const handleSaveCycle = async () => {
@@ -103,7 +195,7 @@ export const WomanProfile: React.FC = () => {
         setConfirmPassword('');
       }, 1500);
     } catch (err: any) {
-      setPasswordError(err?.message || 'Could not update password. Please check your current password.');
+      setPasswordError(err?.message || 'Could not update password. Please check your credentials.');
     } finally {
       setPasswordLoading(false);
     }
@@ -160,7 +252,7 @@ export const WomanProfile: React.FC = () => {
   const avatarUrl = user?.avatar_url || '/assets/woman-portrait.png';
 
   return (
-    <div className="space-y-6 max-w-xl mx-auto pb-16 animate-in fade-in duration-200">
+    <div className="space-y-6 max-w-xl mx-auto pb-20 animate-in fade-in duration-200">
       
       {/* Hidden Photo Input */}
       <input
@@ -172,11 +264,36 @@ export const WomanProfile: React.FC = () => {
       />
 
       {/* ======================================================== */}
-      {/* 1. PROFILE HEADER CARD (Section 15 & 20)                 */}
+      {/* 0. NOTICE: COMPLETE YOUR PROFILE (If DOB missing)        */}
+      {/* ======================================================== */}
+      {!user?.date_of_birth && (
+        <div className="bg-gradient-to-r from-rose-500/10 via-pink-500/10 to-amber-500/10 border-2 border-rose-300 rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Cake className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-extrabold text-gray-900">
+                Complete your profile
+              </h4>
+              <p className="text-[11px] text-gray-600 mt-0.5">
+                Add your Date of Birth to enable personalized cycle insights and accurate age tracking.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsEditingAccount(true)}
+            className="px-4 py-2 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-sm transition shrink-0"
+          >
+            Add DOB
+          </button>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 1. PROFILE HEADER CARD                                   */}
       {/* ======================================================== */}
       <div className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100 flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
-        
-        {/* Large un-distorted photo */}
         <div className="relative shrink-0">
           <img
             src={avatarUrl}
@@ -203,26 +320,140 @@ export const WomanProfile: React.FC = () => {
           <p className="text-xs text-gray-500">{user?.email || ''}</p>
           <div className="flex items-center justify-center sm:justify-start gap-2 pt-1 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold uppercase tracking-wide border border-rose-200">
-              Account: {user?.role || 'woman'}
+              Role: {user?.role || 'woman'}
             </span>
-            {user?.age && (
+            {calculatedAge !== null ? (
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                Age: {calculatedAge} (from DOB)
+              </span>
+            ) : user?.age ? (
               <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
                 Age: {user.age}
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* 2. CYCLE CONFIGURATION                                   */}
+      {/* 2. SECTION: ACCOUNT (Name, Email, DOB, Age, Password)   */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-widest text-rose-500">
+              ACCOUNT
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              if (isEditingAccount) handleSaveAccount();
+              else setIsEditingAccount(true);
+            }}
+            disabled={accountSaving}
+            className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+          >
+            {isEditingAccount ? (
+              <>
+                <Save className="w-3.5 h-3.5" />
+                <span>{accountSaving ? 'Saving...' : 'Save Profile'}</span>
+              </>
+            ) : (
+              <>
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit Account</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          {/* Full Name */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-gray-50/70 border border-gray-100 gap-1.5">
+            <span className="text-gray-500 font-semibold">Full Name</span>
+            {isEditingAccount ? (
+              <input
+                type="text"
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                placeholder="Your full name"
+                className="px-3 py-1.5 bg-white border border-rose-300 rounded-xl font-bold text-gray-900 outline-none text-right sm:w-60"
+              />
+            ) : (
+              <span className="font-bold text-gray-900">{user?.full_name || '—'}</span>
+            )}
+          </div>
+
+          {/* Email (read-only) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-gray-50/70 border border-gray-100 gap-1.5">
+            <span className="text-gray-500 font-semibold">Email Address</span>
+            <span className="font-bold text-gray-900">{user?.email || '—'}</span>
+          </div>
+
+          {/* Date of Birth */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-gray-50/70 border border-gray-100 gap-1.5">
+            <span className="text-gray-500 font-semibold">Date of Birth</span>
+            {isEditingAccount ? (
+              <input
+                type="date"
+                max={new Date().toISOString().split('T')[0]}
+                value={dateOfBirth}
+                onChange={e => setDateOfBirth(e.target.value)}
+                className="px-3 py-1.5 bg-white border border-rose-300 rounded-xl font-bold text-gray-900 outline-none text-right sm:w-60"
+              />
+            ) : (
+              <span className="font-bold text-gray-900">
+                {user?.date_of_birth ? user.date_of_birth : (
+                  <span className="text-rose-500 italic">Not set — click Edit to add</span>
+                )}
+              </span>
+            )}
+          </div>
+
+          {/* Dynamically calculated Age */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-rose-50/50 border border-rose-100 gap-1.5">
+            <div>
+              <span className="text-gray-700 font-bold block">Current Age</span>
+              <span className="text-[10px] text-gray-400">
+                Automatically calculated from your Date of Birth every year
+              </span>
+            </div>
+            <span className="text-sm font-black text-rose-600">
+              {isEditingAccount
+                ? previewAge !== null
+                  ? `${previewAge} years old`
+                  : 'Enter birth date'
+                : calculatedAge !== null
+                ? `${calculatedAge} years old`
+                : user?.age
+                ? `${user.age} years old`
+                : 'Add DOB above'}
+            </span>
+          </div>
+
+          {/* Change Password Button */}
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-50/60 transition border border-gray-200/80 text-left font-semibold text-gray-800"
+          >
+            <div className="flex items-center gap-2.5">
+              <Key className="w-4 h-4 text-rose-500" />
+              <span>Change Password</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3. CYCLE CONFIGURATION                                   */}
       {/* ======================================================== */}
       <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-4">
         <div className="flex items-center justify-between border-b border-gray-100 pb-3">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-rose-500" />
             <h3 className="text-sm font-bold text-gray-900">
-              Cycle Configuration
+              Cycle Baselines
             </h3>
           </div>
           <button
@@ -230,7 +461,7 @@ export const WomanProfile: React.FC = () => {
               if (isEditingCycle) handleSaveCycle();
               else setIsEditingCycle(true);
             }}
-            className="text-xs font-bold text-rose-500 hover:text-rose-600"
+            className="text-xs font-bold text-rose-600 hover:text-rose-700"
           >
             {isEditingCycle ? 'Save Lengths' : 'Edit Lengths'}
           </button>
@@ -248,7 +479,7 @@ export const WomanProfile: React.FC = () => {
                 max={45}
                 value={cycleLength}
                 onChange={e => setCycleLength(Number(e.target.value))}
-                className="w-full p-2 text-center text-lg font-bold bg-white border border-gray-200 rounded-xl text-gray-900 outline-none"
+                className="w-full p-2 text-center text-lg font-bold bg-white border border-rose-300 rounded-xl text-gray-900 outline-none"
               />
             ) : (
               <span className="text-2xl font-black font-display text-gray-900">{cycleLength} days</span>
@@ -266,7 +497,7 @@ export const WomanProfile: React.FC = () => {
                 max={12}
                 value={periodLength}
                 onChange={e => setPeriodLength(Number(e.target.value))}
-                className="w-full p-2 text-center text-lg font-bold bg-white border border-gray-200 rounded-xl text-gray-900 outline-none"
+                className="w-full p-2 text-center text-lg font-bold bg-white border border-rose-300 rounded-xl text-gray-900 outline-none"
               />
             ) : (
               <span className="text-2xl font-black font-display text-gray-900">{periodLength} days</span>
@@ -276,57 +507,152 @@ export const WomanProfile: React.FC = () => {
       </div>
 
       {/* ======================================================== */}
-      {/* 3. PARTNER CONNECTION CARD                               */}
+      {/* 4. SECTION: PRIVACY (Partner, Disconnect, Visibility)    */}
       {/* ======================================================== */}
-      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 text-rose-500 flex items-center justify-center">
-            <Users className="w-5 h-5" />
+      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-4">
+        <span className="text-xs font-black uppercase tracking-widest text-rose-500 block border-b border-gray-100 pb-3">
+          PRIVACY & PARTNER SHARING
+        </span>
+
+        {/* Partner Sharing overview */}
+        <div className="flex items-center justify-between p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-gray-900">Partner Sharing</h4>
+              <p className="text-[11px] text-gray-500">
+                {partnerLink?.status === 'approved'
+                  ? `Connected with ${partnerLink.partner_name || 'Alex'}`
+                  : partnerLink?.status === 'pending'
+                  ? 'Request awaiting your approval'
+                  : 'No partner connected'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-gray-900">Partner Connection</h4>
-            <span className="text-[11px] text-gray-500">
-              {partnerLink?.status === 'approved'
-                ? `Linked with ${partnerLink.partner_name || 'Alex'}`
-                : partnerLink?.status === 'pending'
-                ? 'Pending approval request'
-                : 'No partner connected'}
-            </span>
-          </div>
+
+          <button
+            onClick={() => navigate('/woman/partner')}
+            className="text-xs font-bold text-rose-600 hover:underline"
+          >
+            Manage →
+          </button>
         </div>
 
+        {/* Manage Shared Information button */}
         <button
           onClick={() => navigate('/woman/partner')}
-          className="text-xs font-bold text-rose-600 hover:underline"
+          className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-50/60 transition border border-gray-200/80 text-left font-semibold text-xs text-gray-800"
         >
-          Manage →
-        </button>
-      </div>
-
-      {/* ======================================================== */}
-      {/* 4. SECURITY & ACCOUNT ACTIONS (Section 18 & 19)          */}
-      {/* ======================================================== */}
-      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-2">
-        <h3 className="text-xs font-black uppercase tracking-widest text-rose-500 mb-3">
-          Account Security & Privacy
-        </h3>
-
-        {/* Change Password */}
-        <button
-          onClick={() => setShowPasswordModal(true)}
-          className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-50/60 transition text-left"
-        >
-          <div className="flex items-center gap-3">
-            <Key className="w-4 h-4 text-gray-400" />
-            <div>
-              <span className="text-xs font-bold text-gray-800 block">Change Password</span>
-              <span className="text-[10px] text-gray-400">Update your account authentication credentials</span>
-            </div>
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-500" />
+            <span>Manage Shared Information (Switches)</span>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </button>
 
-        {/* Download Data (JSON) */}
+        {/* Disconnect Partner (if connected) */}
+        {partnerLink && partnerLink.status === 'approved' && (
+          <button
+            onClick={disconnectPartner}
+            className="w-full flex items-center justify-between p-3 rounded-2xl bg-red-50 hover:bg-red-100/70 transition border border-red-100 text-left font-semibold text-xs text-red-600"
+          >
+            <div className="flex items-center gap-2.5">
+              <UserMinus className="w-4 h-4" />
+              <span>Disconnect Partner</span>
+            </div>
+            <span className="text-[10px] text-red-500">Revoke all access</span>
+          </button>
+        )}
+
+        {/* Data visibility notice */}
+        <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100/60 text-xs text-gray-600 space-y-1">
+          <span className="font-bold text-gray-800 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
+            Strict Data Isolation & RLS
+          </span>
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            Your health records are shielded by PostgreSQL Row Level Security. Private notes and weight can never be accessed by a partner account under any circumstance.
+          </p>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 5. SECTION: NOTIFICATIONS                                */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-3">
+        <span className="text-xs font-black uppercase tracking-widest text-rose-500 block border-b border-gray-100 pb-3">
+          NOTIFICATIONS
+        </span>
+
+        {/* Period reminders */}
+        <div className="flex items-center justify-between py-2 text-xs">
+          <div>
+            <span className="font-bold text-gray-900 block">Period Reminders</span>
+            <span className="text-[11px] text-gray-400">Gentle advance reminders before estimated cycle start</span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleNotifPeriod}
+            className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+              notifPeriod ? 'bg-rose-500' : 'bg-gray-200'
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+              notifPeriod ? 'translate-x-6' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+
+        {/* Daily logging reminder */}
+        <div className="flex items-center justify-between py-2 text-xs">
+          <div>
+            <span className="font-bold text-gray-900 block">Daily Logging Reminder</span>
+            <span className="text-[11px] text-gray-400">Evening prompt to record mood, energy, and symptoms</span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleNotifDaily}
+            className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+              notifDaily ? 'bg-rose-500' : 'bg-gray-200'
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+              notifDaily ? 'translate-x-6' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+
+        {/* Partner notifications */}
+        <div className="flex items-center justify-between py-2 text-xs">
+          <div>
+            <span className="font-bold text-gray-900 block">Partner Notifications</span>
+            <span className="text-[11px] text-gray-400">Alerts when a partner requests connection or approves</span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleNotifPartner}
+            className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+              notifPartner ? 'bg-rose-500' : 'bg-gray-200'
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-full bg-white block shadow-sm transform transition-transform ${
+              notifPartner ? 'translate-x-6' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 6. SECTION: DATA (Export, Delete)                         */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-3">
+        <span className="text-xs font-black uppercase tracking-widest text-rose-500 block border-b border-gray-100 pb-3">
+          DATA MANAGEMENT
+        </span>
+
+        {/* Export JSON */}
         <button
           onClick={handleExportJson}
           className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-50/60 transition text-left"
@@ -334,14 +660,14 @@ export const WomanProfile: React.FC = () => {
           <div className="flex items-center gap-3">
             <Download className="w-4 h-4 text-gray-400" />
             <div>
-              <span className="text-xs font-bold text-gray-800 block">Download My Data (JSON)</span>
-              <span className="text-[10px] text-gray-400">Complete export of your cycle logs and profile</span>
+              <span className="text-xs font-bold text-gray-800 block">Export My Data (JSON)</span>
+              <span className="text-[10px] text-gray-400">Complete export of your profile, cycle stats, and logs</span>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </button>
 
-        {/* Download Data (CSV) */}
+        {/* Export CSV */}
         <button
           onClick={handleExportCsv}
           className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-50/60 transition text-left"
@@ -349,22 +675,11 @@ export const WomanProfile: React.FC = () => {
           <div className="flex items-center gap-3">
             <Download className="w-4 h-4 text-gray-400" />
             <div>
-              <span className="text-xs font-bold text-gray-800 block">Download Daily Logs (CSV)</span>
-              <span className="text-[10px] text-gray-400">Spreadsheet-compatible export of daily check-ins</span>
+              <span className="text-xs font-bold text-gray-800 block">Export Daily Logs (CSV)</span>
+              <span className="text-[10px] text-gray-400">Spreadsheet-compatible archive of daily check-ins</span>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-gray-400" />
-        </button>
-
-        {/* Logout */}
-        <button
-          onClick={() => logout()}
-          className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-red-50 text-red-600 transition text-left font-semibold text-xs"
-        >
-          <div className="flex items-center gap-3">
-            <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
-          </div>
         </button>
 
         {/* Delete Account */}
@@ -376,16 +691,78 @@ export const WomanProfile: React.FC = () => {
             <div className="flex items-center gap-3">
               <Trash2 className="w-4 h-4" />
               <div>
-                <span className="text-xs font-bold block">Delete Account</span>
-                <span className="text-[10px] text-red-400">Permanently erase account and all personal logs</span>
+                <span className="text-xs font-bold block">Delete My Account</span>
+                <span className="text-[10px] text-red-400">Permanently delete account and all health history</span>
               </div>
             </div>
+            <ChevronRight className="w-4 h-4 text-red-400" />
           </button>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* MODAL: CHANGE PASSWORD (Section 18)                      */}
+      {/* 7. SECTION: ABOUT                                         */}
+      {/* ======================================================== */}
+      <div className="bg-white rounded-4xl p-6 shadow-float border border-rose-100 space-y-3">
+        <span className="text-xs font-black uppercase tracking-widest text-rose-500 block border-b border-gray-100 pb-3">
+          ABOUT
+        </span>
+
+        {/* Privacy Policy */}
+        <button
+          onClick={() => setShowPrivacyModal(true)}
+          className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition text-left"
+        >
+          <div className="flex items-center gap-3">
+            <FileText className="w-4 h-4 text-gray-400" />
+            <span className="text-xs font-semibold text-gray-800">Privacy Policy</span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        </button>
+
+        {/* Terms of Service */}
+        <button
+          onClick={() => setShowTermsModal(true)}
+          className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition text-left"
+        >
+          <div className="flex items-center gap-3">
+            <FileText className="w-4 h-4 text-gray-400" />
+            <span className="text-xs font-semibold text-gray-800">Terms of Service</span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-gray-400" />
+        </button>
+
+        {/* Medical Disclaimer */}
+        <div className="p-3.5 bg-rose-50/50 rounded-2xl border border-rose-100 text-xs text-gray-600 space-y-1">
+          <div className="flex items-center gap-1.5 font-bold text-gray-800">
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+            <span>Medical Disclaimer</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-600">
+            {MEDICAL_DISCLAIMER_TEXT}
+          </p>
+        </div>
+
+        {/* App Version */}
+        <div className="flex items-center justify-between px-3 pt-2 text-xs text-gray-400">
+          <span>App Version</span>
+          <span className="font-mono font-semibold text-gray-600">v1.2.0 · HerCycle</span>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 8. SIGN OUT                                              */}
+      {/* ======================================================== */}
+      <button
+        onClick={() => logout()}
+        className="w-full py-3.5 rounded-full bg-white hover:bg-red-50 text-red-600 border border-red-200 transition font-bold text-xs shadow-soft flex items-center justify-center gap-2"
+      >
+        <LogOut className="w-4 h-4" />
+        <span>Sign Out</span>
+      </button>
+
+      {/* ======================================================== */}
+      {/* MODAL: CHANGE PASSWORD                                   */}
       {/* ======================================================== */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -485,7 +862,7 @@ export const WomanProfile: React.FC = () => {
       )}
 
       {/* ======================================================== */}
-      {/* MODAL: DELETE ACCOUNT CONFIRMATION (Section 26)          */}
+      {/* MODAL: DELETE ACCOUNT CONFIRMATION                       */}
       {/* ======================================================== */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -497,7 +874,7 @@ export const WomanProfile: React.FC = () => {
             <div className="text-center space-y-1">
               <h3 className="text-lg font-bold text-gray-900">Delete Account Permanently</h3>
               <p className="text-xs text-gray-500 leading-relaxed">
-                This permanently deletes your account and associated personal data. This action is irreversible.
+                This permanently deletes your account, cycle history, and all personal health logs. This action is irreversible.
               </p>
             </div>
 
@@ -532,6 +909,57 @@ export const WomanProfile: React.FC = () => {
                 {deleteLoading ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: PRIVACY POLICY                                    */}
+      {/* ======================================================== */}
+      {showPrivacyModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full max-h-[85vh] overflow-y-auto bg-white rounded-4xl p-6 sm:p-8 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-gray-900">Privacy Policy</h3>
+              <button onClick={() => setShowPrivacyModal(false)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            </div>
+            <div className="text-xs text-gray-600 space-y-3 leading-relaxed">
+              <p className="font-semibold text-gray-800">Your Privacy is Sacred.</p>
+              <p>HerCycle treats your cycle, symptoms, moods, and intimate journal notes as strictly private biometric data. We never sell your personal health records to third-party advertisers or brokers.</p>
+              <p>Partner sharing is opt-in and granular: you select each data point individually. Private notes and weight are sealed and never accessible to partners.</p>
+              <p>You can export or permanently delete your account and all data at any time from this Settings screen.</p>
+            </div>
+            <button
+              onClick={() => setShowPrivacyModal(false)}
+              className="w-full py-2.5 rounded-full bg-rose-500 text-white font-bold text-xs"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: TERMS OF SERVICE                                  */}
+      {/* ======================================================== */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full max-h-[85vh] overflow-y-auto bg-white rounded-4xl p-6 sm:p-8 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-gray-900">Terms of Service</h3>
+              <button onClick={() => setShowTermsModal(false)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            </div>
+            <div className="text-xs text-gray-600 space-y-3 leading-relaxed">
+              <p className="font-semibold text-gray-800">Non-Medical Companion Service</p>
+              <p>HerCycle is designed solely for informational, cycle rhythm awareness, and empathetic companion purposes. Estimates are mathematical projections based upon your entries.</p>
+              <p>HerCycle is not a medical device and should not be used as contraception or for diagnosing any medical or gynecological conditions. Always consult a licensed healthcare professional for clinical concerns.</p>
+            </div>
+            <button
+              onClick={() => setShowTermsModal(false)}
+              className="w-full py-2.5 rounded-full bg-rose-500 text-white font-bold text-xs"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types/database';
+import { calculateAge } from '../lib/cycleCalculator';
 import { 
   Heart, 
   ArrowRight, 
@@ -30,7 +31,7 @@ export const RegisterPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [age, setAge] = useState<number>(26);
+  const [dateOfBirth, setDateOfBirth] = useState<string>('2000-01-01');
 
   // Step 3: Cycle Setup (for Woman)
   const [cycleLength, setCycleLength] = useState<number>(28);
@@ -48,11 +49,22 @@ export const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const calculatedAge = calculateAge(dateOfBirth);
+
   const handleStep1Next = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!fullName.trim() || !email.trim() || !password) {
       setError('Please fill in all required fields.');
+      return;
+    }
+    if (!dateOfBirth) {
+      setError('Date of birth is required.');
+      return;
+    }
+    const ageFromDob = calculateAge(dateOfBirth);
+    if (ageFromDob === null || ageFromDob < 10 || ageFromDob > 100) {
+      setError('Please enter a valid Date of Birth (age must be between 10 and 100).');
       return;
     }
     if (password.length < 8) {
@@ -102,7 +114,8 @@ export const RegisterPage: React.FC = () => {
         password,
         fullName,
         role,
-        age,
+        dateOfBirth: role === 'woman' ? dateOfBirth : undefined,
+        age: calculatedAge ?? undefined,
         avatarUrl,
         cycleLength: role === 'woman' ? cycleLength : undefined,
         periodLength: role === 'woman' ? periodLength : undefined,
@@ -197,6 +210,28 @@ export const RegisterPage: React.FC = () => {
                 placeholder="sarah@example.com"
                 className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-rose-400 text-sm outline-none transition"
               />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-gray-700">Date of Birth</label>
+                {calculatedAge !== null && (
+                  <span className="text-xs font-extrabold text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200/80">
+                    Age: {calculatedAge} years
+                  </span>
+                )}
+              </div>
+              <input
+                type="date"
+                required
+                max={new Date().toISOString().split('T')[0]}
+                value={dateOfBirth}
+                onChange={e => setDateOfBirth(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-rose-400 text-sm outline-none transition"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Required for health tracking. Your current age is computed dynamically from your birth date.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

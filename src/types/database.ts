@@ -12,6 +12,7 @@ export interface UserProfile {
   full_name: string;
   role: UserRole;
   age?: number;
+  date_of_birth?: string; // YYYY-MM-DD
   avatar_url?: string;
   created_at: string;
   updated_at: string;

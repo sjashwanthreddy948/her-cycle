@@ -25,6 +25,24 @@ export function diffDays(d1: Date, d2: Date): number {
   return Math.floor((utc1 - utc2) / (1000 * 60 * 60 * 24));
 }
 
+/**
+ * Calculates current age dynamically from Date of Birth.
+ * Automatically updates every year based on the current date.
+ * Example: DOB 29-10-2006 in 2026 gives age 19, in 2027 gives 20, in 2028 gives 21.
+ */
+export function calculateAge(dob: string | Date | null | undefined, referenceDate: Date = new Date()): number | null {
+  if (!dob) return null;
+  const birthDate = typeof dob === 'string' ? parseDateYMD(dob.split('T')[0]) : new Date(dob);
+  if (isNaN(birthDate.getTime())) return null;
+
+  let age = referenceDate.getFullYear() - birthDate.getFullYear();
+  const m = referenceDate.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && referenceDate.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return Math.max(0, age);
+}
+
 export function calculateCycleState(
   cycleProfile: CycleProfile,
   periodLogs: PeriodLog[],

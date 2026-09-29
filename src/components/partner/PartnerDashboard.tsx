@@ -17,7 +17,9 @@ import {
   Moon,
   Smile,
   BatteryCharging,
-  ArrowRight
+  ArrowRight,
+  Droplet,
+  FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -138,14 +140,14 @@ export const PartnerDashboard: React.FC = () => {
     <div className="space-y-6 max-w-2xl mx-auto pb-16">
       
       {/* ======================================================== */}
-      {/* 1. HEADER (Section 16)                                   */}
+      {/* 1. HEADER (Section 9 & 16: [Her Name]'s Cycle)            */}
       {/* ======================================================== */}
       <div className="px-2">
         <h1 className="text-2xl sm:text-3xl font-black font-display text-gray-900 tracking-tight">
-          Hi {partnerFirstName}
+          {womanName}'s Cycle
         </h1>
         <p className="text-xs sm:text-sm text-gray-500 mt-1">
-          Here's what {womanName} has chosen to share with you.
+          Read-only view of cycle rhythms and daily wellness shared with you.
         </p>
       </div>
 
@@ -262,7 +264,7 @@ export const PartnerDashboard: React.FC = () => {
       {/* ======================================================== */}
       {/* 4. TODAY'S SHARED VITALS                                 */}
       {/* ======================================================== */}
-      {(permissions.mood || permissions.energy || permissions.sleep || permissions.symptoms) && (
+      {(permissions.mood || permissions.energy || permissions.sleep || permissions.symptoms || permissions.water || permissions.flow || permissions.notes) ? (
         <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100 space-y-4">
           <span className="text-xs font-black uppercase tracking-widest text-rose-500 block">
             TODAY'S SHARED LOGS
@@ -284,7 +286,27 @@ export const PartnerDashboard: React.FC = () => {
                 <BatteryCharging className="w-4 h-4 text-amber-500 mx-auto mb-1" />
                 <span className="text-[10px] text-gray-400 uppercase font-bold block">Energy</span>
                 <span className="text-sm font-bold text-gray-900 capitalize">
-                  {todayLog?.energy || 'Good'}
+                  {todayLog?.energy || 'Medium'}
+                </span>
+              </div>
+            )}
+
+            {permissions.symptoms && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
+                <Sparkles className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Symptoms</span>
+                <span className="text-xs font-bold text-gray-900 truncate block">
+                  {todayLog?.symptoms?.length ? todayLog.symptoms.join(', ') : 'None'}
+                </span>
+              </div>
+            )}
+
+            {permissions.flow && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
+                <Droplet className="w-4 h-4 text-rose-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Period Flow</span>
+                <span className="text-sm font-bold text-gray-900 capitalize">
+                  {todayLog?.flow && todayLog.flow !== 'none' ? todayLog.flow : 'None'}
                 </span>
               </div>
             )}
@@ -299,16 +321,31 @@ export const PartnerDashboard: React.FC = () => {
               </div>
             )}
 
-            {permissions.symptoms && (
+            {permissions.water && (
               <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100">
-                <Sparkles className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
-                <span className="text-[10px] text-gray-400 uppercase font-bold block">Sensations</span>
-                <span className="text-xs font-bold text-gray-900 truncate block">
-                  {todayLog?.symptoms?.length ? todayLog.symptoms.join(', ') : 'None logged'}
+                <Droplet className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                <span className="text-[10px] text-gray-400 uppercase font-bold block">Water</span>
+                <span className="text-sm font-bold text-gray-900">
+                  {todayLog?.water_glasses ? `${todayLog.water_glasses} glasses` : '4 glasses'}
                 </span>
               </div>
             )}
+
+            {permissions.notes && todayLog?.notes && (
+              <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 col-span-2 text-left">
+                <div className="flex items-center gap-1.5 mb-1 text-gray-400">
+                  <FileText className="w-3.5 h-3.5 text-gray-500" />
+                  <span className="text-[10px] uppercase font-bold">Shared Note</span>
+                </div>
+                <p className="text-xs text-gray-700 italic">"{todayLog.notes}"</p>
+              </div>
+            )}
           </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-4xl p-6 shadow-soft border border-rose-100 text-center py-6 text-gray-400 text-xs flex items-center justify-center gap-2">
+          <Lock className="w-4 h-4 text-gray-400" />
+          <span>Daily wellness details are currently kept private by {womanName}.</span>
         </div>
       )}
 

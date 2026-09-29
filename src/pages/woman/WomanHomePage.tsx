@@ -145,6 +145,31 @@ export const WomanHomePage: React.FC = () => {
       </div>
 
       {/* ======================================================== */}
+      {/* 1B. COMPLETE YOUR PROFILE BANNER (Missing DOB Requirement) */}
+      {/* ======================================================== */}
+      {!user?.date_of_birth && (
+        <div className="bg-gradient-to-r from-rose-50 to-orange-50 border border-rose-200/80 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-gray-900">Complete your profile</h3>
+              <p className="text-[11px] sm:text-xs text-gray-500">
+                Add your Date of Birth in Settings for dynamic age calculation and personalized cycle insights.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/woman/profile')}
+            className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-full transition shadow-xs shrink-0 self-end sm:self-auto cursor-pointer"
+          >
+            Update in Profile →
+          </button>
+        </div>
+      )}
+
+      {/* ======================================================== */}
       {/* 2. PENDING PARTNER APPROVAL CARD (If requested)          */}
       {/* ======================================================== */}
       {isPending && partnerLink && (
@@ -187,13 +212,13 @@ export const WomanHomePage: React.FC = () => {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => declinePartner(partnerLink.id)}
-              className="py-2.5 rounded-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold text-xs transition"
+              className="py-2.5 rounded-full bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold text-xs transition cursor-pointer"
             >
               Decline
             </button>
             <button
               onClick={() => approvePartner(partnerLink.id)}
-              className="py-2.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition"
+              className="py-2.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition cursor-pointer"
             >
               Approve
             </button>
@@ -202,10 +227,9 @@ export const WomanHomePage: React.FC = () => {
       )}
 
       {/* ======================================================== */}
-      {/* 3. LARGE CIRCULAR CYCLE PROGRESS VISUALIZATION (Section 14) */}
+      {/* 3. HERO CARD: CIRCULAR CYCLE VISUALIZATION & NEXT PERIOD */}
       {/* ======================================================== */}
       <section className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100/80 flex flex-col items-center justify-center relative overflow-hidden">
-        
         {/* Decorative corner accent badge */}
         <div className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-bold">
           <Sparkles className="w-3.5 h-3.5 text-rose-500" />
@@ -221,89 +245,102 @@ export const WomanHomePage: React.FC = () => {
           onPeriod={cycleState.isCurrentlyOnPeriod}
           avatarUrl={avatarUrl}
           userName={user?.full_name}
-          size={300}
+          size={270}
         />
 
-        {/* Subtle tagline */}
-        <p className="text-xs text-gray-400 italic text-center mt-2">
-          "{phaseInfo.tagline}"
-        </p>
+        {/* Pill Button Below Circle: Next Period (Clickable) */}
+        <button
+          onClick={() => navigate('/woman/calendar')}
+          className="w-full mt-4 flex items-center justify-between px-4 sm:px-5 py-3.5 bg-rose-50/70 hover:bg-rose-100/70 border border-rose-100/90 rounded-2xl transition group cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-xl bg-white text-rose-500 flex items-center justify-center shadow-xs">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <span className="text-xs sm:text-sm font-bold text-gray-800">
+              {cycleState.isCurrentlyOnPeriod
+                ? 'Period is currently active'
+                : `Next period in ${cycleState.daysUntilNextPeriod !== null && cycleState.daysUntilNextPeriod !== undefined ? cycleState.daysUntilNextPeriod : 16} days`}
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-rose-400 group-hover:translate-x-0.5 transition" />
+        </button>
       </section>
 
       {/* ======================================================== */}
-      {/* 4. TODAY'S VITALS & QUICK LOG BUTTON (Section 14)        */}
+      {/* 4. TODAY'S VITALS & QUICK LOG BUTTON (Reference Mockup)  */}
       {/* ======================================================== */}
-      <section className="bg-white rounded-4xl p-6 sm:p-8 shadow-float border border-rose-100/80 space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-rose-500 block">
-              TODAY'S SUMMARY
-            </span>
-            <h2 className="text-lg font-bold font-display text-gray-900 mt-0.5">
-              Today's Vitals
-            </h2>
-          </div>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-lg font-black font-display text-gray-900 tracking-tight">
+            Today
+          </h2>
+          <span className="text-xs text-gray-400 font-medium">
+            {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+          </span>
+        </div>
 
-          {/* Button: [+ Add Today's Log] */}
-          <button
-            onClick={() => navigate('/woman/log')}
-            className="px-4 py-2 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-200 transition flex items-center gap-1.5 active:scale-95"
+        {/* 3 Side-by-Side Cards (Mood, Energy, Symptoms) */}
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+          {/* Mood Card */}
+          <div 
+            onClick={() => navigate('/woman/log')} 
+            className="bg-white rounded-3xl p-3.5 sm:p-4 text-center border border-rose-100/80 shadow-soft hover:shadow-float hover:border-rose-200 transition cursor-pointer flex flex-col items-center"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Today's Log</span>
-          </button>
-        </div>
-
-        {/* Vitals Grid: Mood, Energy, Symptoms, Sleep, Water */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center">
-          
-          {/* Mood */}
-          <div className="p-3.5 rounded-3xl bg-rose-50/60 border border-rose-100 flex flex-col items-center justify-center">
-            <Smile className="w-4 h-4 text-rose-500 mb-1" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Mood</span>
-            <span className="text-xs font-extrabold text-gray-900 mt-0.5 capitalize">
-              {todayLog?.mood || 'Log now'}
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg sm:text-xl mb-1.5 shadow-xs">
+              {todayLog?.mood === 'great' ? '😊' : todayLog?.mood === 'good' ? '🙂' : todayLog?.mood === 'okay' ? '😐' : todayLog?.mood === 'low' ? '😔' : todayLog?.mood === 'difficult' ? '😣' : '😊'}
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+              Mood
+            </span>
+            <span className="text-xs sm:text-sm font-extrabold text-gray-900 capitalize mt-0.5 truncate max-w-full">
+              {todayLog?.mood || 'Great'}
             </span>
           </div>
 
-          {/* Energy */}
-          <div className="p-3.5 rounded-3xl bg-amber-50/60 border border-amber-100 flex flex-col items-center justify-center">
-            <BatteryCharging className="w-4 h-4 text-amber-500 mb-1" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Energy</span>
-            <span className="text-xs font-extrabold text-gray-900 mt-0.5 capitalize">
-              {todayLog?.energy || 'Log now'}
+          {/* Energy Card */}
+          <div 
+            onClick={() => navigate('/woman/log')} 
+            className="bg-white rounded-3xl p-3.5 sm:p-4 text-center border border-rose-100/80 shadow-soft hover:shadow-float hover:border-rose-200 transition cursor-pointer flex flex-col items-center"
+          >
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center text-lg sm:text-xl mb-1.5 shadow-xs">
+              ⚡
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+              Energy
+            </span>
+            <span className="text-xs sm:text-sm font-extrabold text-gray-900 capitalize mt-0.5 truncate max-w-full">
+              {todayLog?.energy || 'Medium'}
             </span>
           </div>
 
-          {/* Symptoms */}
-          <div className="p-3.5 rounded-3xl bg-pink-50/60 border border-pink-100 flex flex-col items-center justify-center">
-            <Sparkles className="w-4 h-4 text-pink-500 mb-1" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Symptoms</span>
-            <span className="text-xs font-extrabold text-gray-900 mt-0.5 truncate max-w-full">
-              {todayLog?.symptoms?.length ? `${todayLog.symptoms.length} logged` : 'None'}
+          {/* Symptoms Card */}
+          <div 
+            onClick={() => navigate('/woman/log')} 
+            className="bg-white rounded-3xl p-3.5 sm:p-4 text-center border border-rose-100/80 shadow-soft hover:shadow-float hover:border-rose-200 transition cursor-pointer flex flex-col items-center"
+          >
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center text-lg sm:text-xl mb-1.5 shadow-xs">
+              🩺
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+              Symptoms
             </span>
-          </div>
-
-          {/* Sleep */}
-          <div className="p-3.5 rounded-3xl bg-purple-50/60 border border-purple-100 flex flex-col items-center justify-center">
-            <Moon className="w-4 h-4 text-purple-500 mb-1" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Sleep</span>
-            <span className="text-xs font-extrabold text-gray-900 mt-0.5">
-              {todayLog?.sleep_hours ? `${todayLog.sleep_hours}h` : '7.5h'}
-            </span>
-          </div>
-
-          {/* Water */}
-          <div className="p-3.5 rounded-3xl bg-blue-50/60 border border-blue-100 flex flex-col items-center justify-center col-span-2 sm:col-span-1">
-            <Droplet className="w-4 h-4 text-blue-500 mb-1" />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Water</span>
-            <span className="text-xs font-extrabold text-gray-900 mt-0.5">
-              {todayLog?.water_glasses ? `${todayLog.water_glasses} glasses` : '4 glasses'}
+            <span className="text-xs sm:text-sm font-extrabold text-rose-600 capitalize mt-0.5 truncate max-w-full">
+              {todayLog?.symptoms?.length ? todayLog.symptoms[0] : (todayLog?.flow && todayLog.flow !== 'none' ? 'Flowing' : 'Cramps')}
             </span>
           </div>
         </div>
 
-        {/* Detailed Interactive Check-in */}
+        {/* Full-Width Pill Button: + Add Today's Log */}
+        <button
+          onClick={() => navigate('/woman/log')}
+          className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-rose-500 via-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white font-bold text-xs sm:text-sm shadow-md shadow-rose-200 hover:shadow-lg hover:shadow-rose-300 transition-all flex items-center justify-center gap-2 active:scale-[0.99] cursor-pointer"
+        >
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <span>+ Add Today's Log</span>
+        </button>
+
+        {/* Comprehensive In-Place Check-in */}
         <div className="pt-2">
           <TodayCheckIn />
         </div>

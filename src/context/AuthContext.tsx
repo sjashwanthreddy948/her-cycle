@@ -3,6 +3,7 @@ import { UserProfile, UserRole } from '../types/database';
 import { db } from '../lib/db';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { normalizePartnerCode } from '../lib/codeUtils';
+import { calculateAge } from '../lib/cycleCalculator';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -21,6 +22,7 @@ interface AuthContextType {
     password: string;
     fullName: string;
     role: UserRole;
+    dateOfBirth?: string;
     age?: number;
     avatarUrl?: string;
     cycleLength?: number;
@@ -41,6 +43,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
+
+  // Helper to hydrate profile with date_of_birth and dynamic age
+  function hydrateProfile(rawProfile: UserProfile, authUser?: any): UserProfile {
+    const dob = authUser?.user_metadata?.date_of_birth || rawProfile.date_of_birth;
+    const computedAge = dob ? calculateAge(dob) : rawProfile.age;
+    return {
+      ...rawProfile,
+      date_of_birth: dob,
+      age: (computedAge !== null && computedAge !== undefined) ? computedAge : rawProfile.age,
+    };
+  }
 
   // Initialize Real Supabase Auth Session
   useEffect(() => {
@@ -66,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (session?.user && isMounted) {
           const profile = await db.getProfile(session.user.id);
           if (profile && isMounted) {
-            setUser(profile);
+            setUser(hydrateProfile(profile, session.user));
           } else if (isMounted) {
             if (import.meta.env.DEV) {
               console.warn('[HerCycle Auth] Session user ID has no profile row:', session.user.id);
@@ -96,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             const profile = await db.getProfile(session.user.id);
             if (isMounted && profile) {
-              setUser(profile);
+              setUser(hydrateProfile(profile, session.user));
             }
           } catch (err) {
             if (import.meta.env.DEV) {
@@ -181,12 +194,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error(`Profile not found and could not be created: ${profileError.message}`);
         }
 
-        setUser(newProfile);
-        return newProfile;
+        const hydrated = hydrateProfile(newProfile, data.user);
+        setUser(hydrated);
+        return hydrated;
       }
 
-      setUser(profile);
-      return profile;
+      const hydrated = hydrateProfile(profile, data.user);
+      setUser(hydrated);
+      return hydrated;
     } finally {
       setIsLoading(false);
     }
@@ -197,6 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string;
     fullName: string;
     role: UserRole;
+    dateOfBirth?: string;
     age?: number;
     avatarUrl?: string;
     cycleLength?: number;
@@ -220,6 +236,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setSessionError(null);
 
+    const computedAge = params.dateOfBirth ? calculateAge(params.dateOfBirth) : params.age;
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
@@ -228,6 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data: {
             full_name: params.fullName.trim(),
             role: params.role,
+            date_of_birth: params.dateOfBirth,
           },
         },
       });
@@ -263,7 +282,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: cleanEmail,
         full_name: params.fullName.trim(),
         role: params.role,
-        age: params.age,
+        date_of_birth: params.dateOfBirth,
+        age: (computedAge !== null && computedAge !== undefined) ? computedAge : undefined,
         avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : undefined),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -368,9 +388,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateCurrentUserProfile = async (updates: Partial<UserProfile>) => {
     if (!user) throw new Error('Not logged in');
+
+    // If Date of Birth is updated, persist permanently to Supabase Auth metadata
+    if (updates.date_of_birth && isSupabaseConfigured && supabase) {
+      try {
+        await supabase.auth.updateUser({
+          data: { date_of_birth: updates.date_of_birth },
+        });
+      } catch (authErr) {
+        if (import.meta.env.DEV) {
+          console.warn('[HerCycle Auth] Could not update auth user metadata for DOB:', authErr);
+        }
+      }
+
+      const computedAge = calculateAge(updates.date_of_birth);
+      if (computedAge !== null) {
+        updates.age = computedAge;
+      }
+    }
+
     const updated = await db.updateProfile(user.id, updates);
-    setUser(updated);
-    return updated;
+    const hydrated: UserProfile = {
+      ...updated,
+      date_of_birth: updates.date_of_birth || user.date_of_birth,
+      age: updates.date_of_birth ? (calculateAge(updates.date_of_birth) ?? updated.age) : updated.age,
+    };
+    setUser(hydrated);
+    return hydrated;
   };
 
   const changePassword = async (_currentPass: string, newPass: string): Promise<void> => {

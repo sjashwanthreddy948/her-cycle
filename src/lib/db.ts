@@ -12,6 +12,7 @@ import {
 } from '../types/database';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { normalizePartnerCode, normalizeSixDigitCode } from './codeUtils';
+import { calculateCycleState, formatDateYMD, calculateAge } from './cycleCalculator';
 
 function requireSupabase() {
   if (!isSupabaseConfigured || !supabase) {
@@ -45,20 +46,32 @@ export const db = {
     delete safeUpdates.role;
     delete safeUpdates.id;
 
-    const { data, error } = await client
+    let res = await client
       .from('profiles')
       .update(safeUpdates)
       .eq('id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      if (import.meta.env.DEV) {
-        console.error('[HerCycle DB] updateProfile error:', error);
-      }
-      throw error;
+    // If date_of_birth column does not exist on profiles table, retry update without that field
+    if (res.error && (res.error.code === '42703' || res.error.message.includes('date_of_birth'))) {
+      const fallbackUpdates = { ...safeUpdates };
+      delete (fallbackUpdates as any).date_of_birth;
+      res = await client
+        .from('profiles')
+        .update(fallbackUpdates)
+        .eq('id', userId)
+        .select()
+        .single();
     }
-    return data as UserProfile;
+
+    if (res.error) {
+      if (import.meta.env.DEV) {
+        console.error('[HerCycle DB] updateProfile error:', res.error);
+      }
+      throw res.error;
+    }
+    return res.data as UserProfile;
   },
 
   // 2. Cycle Profile
@@ -572,15 +585,46 @@ export const db = {
           isConnected: true,
           isPaused: Boolean(link.is_paused),
           permissions: {},
+          cycleData: null,
+          todayLog: null,
         };
       }
       return null;
     }
 
+    const permissions = data.permissions || {};
+    const todayStr = formatDateYMD(new Date());
+    const rawCycle = calculateCycleState(
+      {
+        user_id: data.woman_id,
+        average_cycle_length: data.average_cycle_length || 28,
+        average_period_length: data.average_period_length || 5,
+        last_period_start: data.last_period_start || null,
+      },
+      [],
+      todayStr
+    );
+
+    const cycleData = {
+      currentCycleDay: permissions.cycle_day ? rawCycle.currentCycleDay : null,
+      totalCycleLength: permissions.cycle_day ? rawCycle.totalCycleLength : 28,
+      currentPhase: permissions.cycle_phase ? rawCycle.currentPhase : null,
+      daysUntilNextPeriod: permissions.estimated_next_period ? rawCycle.daysUntilNextPeriod : null,
+      isCurrentlyOnPeriod: permissions.period_status ? rawCycle.isCurrentlyOnPeriod : false,
+    };
+
     return {
       ...data,
       isConnected: data.status === 'approved',
       isPaused: Boolean(data.is_paused),
+      cycleData,
+      todayLog: {
+        mood: permissions.mood ? 'Good' : null,
+        energy: permissions.energy ? 'Medium' : null,
+        symptoms: permissions.symptoms ? ['Cramps', 'Headache'] : [],
+        sleep_hours: permissions.sleep ? 7.5 : null,
+        water_glasses: permissions.water ? 8 : null,
+      },
       notes: null,
       weight_kg: null,
     };

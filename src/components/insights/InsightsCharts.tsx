@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CycleStats } from '../../types/cycle';
 import { 
   RotateCcw, 
@@ -8,7 +9,9 @@ import {
   Activity, 
   TrendingUp, 
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  Sparkles,
+  Plus
 } from 'lucide-react';
 
 interface InsightsChartsProps {
@@ -16,6 +19,7 @@ interface InsightsChartsProps {
 }
 
 export const InsightsCharts: React.FC<InsightsChartsProps> = ({ stats }) => {
+  const navigate = useNavigate();
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 
   const {
@@ -29,6 +33,8 @@ export const InsightsCharts: React.FC<InsightsChartsProps> = ({ stats }) => {
     moodDistribution,
     energyDistribution,
   } = stats;
+
+  const hasHistory = history && history.length > 0;
 
   // 1. Cycle Length Line Chart Math
   const maxCycle = Math.max(35, ...history.map(h => h.cycleLength));
@@ -67,6 +73,32 @@ export const InsightsCharts: React.FC<InsightsChartsProps> = ({ stats }) => {
 
   return (
     <div className="space-y-4">
+      {/* Notice when historical data is still accumulating */}
+      {!hasHistory && (
+        <div className="bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200/80 rounded-3xl p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">
+                Keep logging to unlock more insights.
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                HerCycle builds detailed cycle history, regularity scoring, and pattern forecasts as you log your periods and daily sensations.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/woman/log')}
+            className="px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-full transition shadow-xs shrink-0 self-end sm:self-auto flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Today's Log</span>
+          </button>
+        </div>
+      )}
+
       {/* SUMMARY STATS GRID */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-3xl p-4 shadow-soft border border-rose-100/70">
@@ -125,70 +157,77 @@ export const InsightsCharts: React.FC<InsightsChartsProps> = ({ stats }) => {
           </span>
         </div>
 
-        <div className="w-full overflow-x-auto no-scrollbar">
-          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-36">
-            <defs>
-              <linearGradient id="cycleLineGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#F43F5E" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#F43F5E" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
+        {hasHistory ? (
+          <div className="w-full overflow-x-auto no-scrollbar">
+            <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-36">
+              <defs>
+                <linearGradient id="cycleLineGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#F43F5E" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#F43F5E" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
 
-            {/* Grid horizontal guidelines */}
-            <line x1={paddingX} y1={paddingY} x2={chartWidth - paddingX} y2={paddingY} stroke="#F3F4F6" strokeDasharray="3 3" />
-            <line x1={paddingX} y1={chartHeight / 2} x2={chartWidth - paddingX} y2={chartHeight / 2} stroke="#F3F4F6" strokeDasharray="3 3" />
-            <line x1={paddingX} y1={chartHeight - paddingY} x2={chartWidth - paddingX} y2={chartHeight - paddingY} stroke="#E5E7EB" />
+              {/* Grid horizontal guidelines */}
+              <line x1={paddingX} y1={paddingY} x2={chartWidth - paddingX} y2={paddingY} stroke="#F3F4F6" strokeDasharray="3 3" />
+              <line x1={paddingX} y1={chartHeight / 2} x2={chartWidth - paddingX} y2={chartHeight / 2} stroke="#F3F4F6" strokeDasharray="3 3" />
+              <line x1={paddingX} y1={chartHeight - paddingY} x2={chartWidth - paddingX} y2={chartHeight - paddingY} stroke="#E5E7EB" />
 
-            {/* Area fill */}
-            {areaPath && <path d={areaPath} fill="url(#cycleLineGrad)" />}
+              {/* Area fill */}
+              {areaPath && <path d={areaPath} fill="url(#cycleLineGrad)" />}
 
-            {/* Main line */}
-            {linePath && (
-              <path
-                d={linePath}
-                fill="none"
-                stroke="#F43F5E"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-
-            {/* Data points */}
-            {points.map((pt, idx) => (
-              <g key={idx}>
-                <circle
-                  cx={pt.x}
-                  cy={pt.y}
-                  r="5"
-                  fill="#FFFFFF"
+              {/* Main line */}
+              {linePath && (
+                <path
+                  d={linePath}
+                  fill="none"
                   stroke="#F43F5E"
-                  strokeWidth="2.5"
-                  className="hover:r-7 transition-all cursor-pointer"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                <text
-                  x={pt.x}
-                  y={pt.y - 10}
-                  fontSize="10"
-                  fontWeight="bold"
-                  fill="#4B5563"
-                  textAnchor="middle"
-                >
-                  {pt.cycleLength}d
-                </text>
-                <text
-                  x={pt.x}
-                  y={chartHeight - 6}
-                  fontSize="9"
-                  fill="#9CA3AF"
-                  textAnchor="middle"
-                >
-                  C{pt.cycleNumber}
-                </text>
-              </g>
-            ))}
-          </svg>
-        </div>
+              )}
+
+              {/* Data points */}
+              {points.map((pt, idx) => (
+                <g key={idx}>
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r="5"
+                    fill="#FFFFFF"
+                    stroke="#F43F5E"
+                    strokeWidth="2.5"
+                    className="hover:r-7 transition-all cursor-pointer"
+                  />
+                  <text
+                    x={pt.x}
+                    y={pt.y - 10}
+                    fontSize="10"
+                    fontWeight="bold"
+                    fill="#4B5563"
+                    textAnchor="middle"
+                  >
+                    {pt.cycleLength}d
+                  </text>
+                  <text
+                    x={pt.x}
+                    y={chartHeight - 6}
+                    fontSize="9"
+                    fill="#9CA3AF"
+                    textAnchor="middle"
+                  >
+                    C{pt.cycleNumber}
+                  </text>
+                </g>
+              ))}
+            </svg>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-gray-400 text-xs">
+            <p className="font-semibold text-gray-700 mb-1">No completed cycles recorded yet</p>
+            <p className="text-[11px] text-gray-400">Log your period start and end dates to visualize cycle length variation over time.</p>
+          </div>
+        )}
       </div>
 
       {/* CHART 2: PERIOD DURATION (Bar Chart) */}
@@ -203,27 +242,34 @@ export const InsightsCharts: React.FC<InsightsChartsProps> = ({ stats }) => {
           <span className="text-xs text-gray-500 font-medium">Days per period</span>
         </div>
 
-        <div className="flex items-end justify-between h-28 pt-4 px-3 border-b border-gray-100">
-          {history.map((h, idx) => {
-            const barHeight = Math.min(100, Math.round((h.periodLength / 8) * 100));
-            return (
-              <div key={idx} className="flex flex-col items-center gap-1.5 flex-1 max-w-[36px]">
-                <span className="text-[10px] font-bold text-rose-600">
-                  {h.periodLength}d
-                </span>
-                <div className="w-full bg-rose-100 rounded-t-xl overflow-hidden flex items-end h-20">
-                  <div
-                    style={{ height: `${barHeight}%` }}
-                    className="w-full bg-gradient-to-t from-rose-500 to-pink-400 rounded-t-xl transition-all duration-700"
-                  />
+        {hasHistory ? (
+          <div className="flex items-end justify-between h-28 pt-4 px-3 border-b border-gray-100">
+            {history.map((h, idx) => {
+              const barHeight = Math.min(100, Math.round((h.periodLength / 8) * 100));
+              return (
+                <div key={idx} className="flex flex-col items-center gap-1.5 flex-1 max-w-[36px]">
+                  <span className="text-[10px] font-bold text-rose-600">
+                    {h.periodLength}d
+                  </span>
+                  <div className="w-full bg-rose-100 rounded-t-xl overflow-hidden flex items-end h-20">
+                    <div
+                      style={{ height: `${barHeight}%` }}
+                      className="w-full bg-gradient-to-t from-rose-500 to-pink-400 rounded-t-xl transition-all duration-700"
+                    />
+                  </div>
+                  <span className="text-[9px] text-gray-400 font-semibold">
+                    C{h.cycleNumber}
+                  </span>
                 </div>
-                <span className="text-[9px] text-gray-400 font-semibold">
-                  C{h.cycleNumber}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-gray-400 text-xs">
+            <p className="font-semibold text-gray-700 mb-1">No period duration records yet</p>
+            <p className="text-[11px] text-gray-400">Start and end dates from your menstrual logs will generate your flow duration history.</p>
+          </div>
+        )}
       </div>
 
       {/* CHART 3: SYMPTOMS FREQUENCY (Horizontal Bar Chart) */}

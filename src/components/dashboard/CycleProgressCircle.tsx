@@ -93,50 +93,23 @@ export const CycleProgressCircle: React.FC<CycleProgressCircleProps> = ({
           />
         </svg>
 
-        {/* Center Content Inside Circle */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
+        {/* Center Content Inside Circle Matching Reference Mockup */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 select-none">
+          <span className="text-xs uppercase font-extrabold tracking-widest text-gray-400">
+            Day
+          </span>
           
-          {/* Subtle woman portrait avatar or wellness icon at top of center */}
-          {avatarUrl && (
-            <div className="mb-2 relative">
-              <img
-                src={avatarUrl}
-                alt={userName || 'Woman'}
-                className="w-11 h-11 rounded-full object-cover ring-2 ring-rose-300 shadow-sm"
-              />
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 rounded-full ring-2 ring-white" />
-            </div>
-          )}
-
-          {/* DAY 12 */}
-          <div className="flex items-baseline justify-center gap-1.5">
-            <span className="text-xs uppercase font-extrabold tracking-widest text-rose-500">Day</span>
-            <span className="text-5xl font-black font-display tracking-tight text-gray-900 leading-none">
-              {currentDay}
-            </span>
-          </div>
-
-          {/* of 28 */}
-          <span className="text-xs font-semibold text-gray-500 mt-1">
-            of {totalDays} days
+          <span className="text-5xl sm:text-6xl font-black font-display tracking-tight text-gray-900 leading-none my-1">
+            {currentDay}
           </span>
 
-          {/* Phase Badge Pill */}
-          <div className="mt-3">
-            <span className={`px-3.5 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase shadow-xs ${phaseInfo.badgeBg} ${phaseInfo.badgeText}`}>
-              {phaseInfo.name}
-            </span>
-          </div>
+          <span className="text-xs font-semibold text-gray-400">
+            of {totalDays}
+          </span>
 
-          {/* Estimated Next Period */}
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-            <Calendar className="w-3.5 h-3.5 text-rose-500" />
-            <span>
-              {onPeriod 
-                ? 'Period is active' 
-                : daysUntilNextPeriod !== null
-                ? `Next period: ${daysUntilNextPeriod} days`
-                : 'Next period: ~16 days'}
+          <div className="mt-2.5">
+            <span className={`inline-block px-3 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase shadow-2xs ${phaseInfo.badgeBg} ${phaseInfo.badgeText}`}>
+              {phaseInfo.name}
             </span>
           </div>
         </div>
