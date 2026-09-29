@@ -45,25 +45,14 @@ export const db = {
     const safeUpdates = { ...updates, updated_at: new Date().toISOString() };
     delete safeUpdates.role;
     delete safeUpdates.id;
+    delete (safeUpdates as any).date_of_birth;
 
-    let res = await client
+    const res = await client
       .from('profiles')
       .update(safeUpdates)
       .eq('id', userId)
       .select()
       .maybeSingle();
-
-    // If date_of_birth column does not exist on profiles table, retry update without that field
-    if (res.error && (res.error.code === '42703' || res.error.message.includes('date_of_birth'))) {
-      const fallbackUpdates = { ...safeUpdates };
-      delete (fallbackUpdates as any).date_of_birth;
-      res = await client
-        .from('profiles')
-        .update(fallbackUpdates)
-        .eq('id', userId)
-        .select()
-        .single();
-    }
 
     if (res.error) {
       if (import.meta.env.DEV) {

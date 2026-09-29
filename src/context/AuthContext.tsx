@@ -298,22 +298,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const userId = data.user.id;
 
-      // Upsert profile in Supabase: profiles.id MUST equal auth.users.id
-      const newProfile: UserProfile = {
+      // Database columns matching postgres 'profiles' table schema
+      const dbProfileRow = {
         id: userId,
         email: cleanEmail,
         full_name: params.fullName.trim(),
         role: params.role,
-        date_of_birth: params.dateOfBirth,
-        age: (computedAge !== null && computedAge !== undefined) ? computedAge : undefined,
-        avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : undefined),
+        age: (computedAge !== null && computedAge !== undefined) ? computedAge : null,
+        avatar_url: params.avatarUrl || (params.role === 'woman' ? '/assets/woman-portrait.png' : null),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert(newProfile);
+        .upsert(dbProfileRow);
 
       if (profileError) {
         if (import.meta.env.DEV) {
@@ -321,6 +320,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         throw new Error(`Profile creation failed: ${profileError.message}`);
       }
+
+      const newProfile: UserProfile = {
+        ...dbProfileRow,
+        age: (computedAge !== null && computedAge !== undefined) ? computedAge : undefined,
+        avatar_url: dbProfileRow.avatar_url || undefined,
+        date_of_birth: params.dateOfBirth,
+      };
 
       if (params.role === 'woman') {
         try {
