@@ -39,7 +39,7 @@ export const PartnerSharing: React.FC = () => {
   const isConnected = partnerLink && (partnerLink.status === 'approved');
   const isPending = partnerLink && partnerLink.status === 'pending';
   const isPaused = partnerLink?.is_paused || partnerLink?.status === 'paused';
-  const partnerName = partnerLink?.partner_name || 'Alex';
+  const partnerName = partnerLink?.partner_name || 'Partner';
 
   // Poll for incoming partner connection requests every 4s when a code is active or pending
   useEffect(() => {

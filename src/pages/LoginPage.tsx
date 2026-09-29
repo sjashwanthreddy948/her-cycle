@@ -10,9 +10,7 @@ import {
   ArrowRight, 
   AlertCircle, 
   Sparkles,
-  ShieldCheck,
-  User,
-  HeartHandshake
+  ShieldCheck
 } from 'lucide-react';
 import { normalizePartnerCode, looksLikePartnerCode } from '../lib/codeUtils';
 
@@ -49,18 +47,6 @@ export const LoginPage: React.FC = () => {
       setError(err?.message || 'Login failed. Please check your email and password.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Quick Demo Access Fillers (Role strictly validated by database authentication)
-  const handleQuickLogin = (role: 'woman' | 'partner') => {
-    setError(null);
-    if (role === 'woman') {
-      setEmail('demo.woman@hercycle.app');
-      setPassword('Demo@12345');
-    } else {
-      setEmail('demo.partner@hercycle.app');
-      setPassword('Demo@12345');
     }
   };
 
@@ -234,34 +220,6 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Quick Demo Credentials Switchers */}
-          <div className="mt-6 pt-5 border-t border-gray-100">
-            <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block text-center mb-2.5">
-              Quick Test Accounts
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('woman')}
-                className="py-2 px-3 rounded-2xl bg-rose-50 hover:bg-rose-100/80 border border-rose-200/80 text-rose-700 text-xs font-bold transition flex items-center justify-center gap-1.5"
-              >
-                <User className="w-3.5 h-3.5" />
-                <span>Continue as Woman</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('partner')}
-                className="py-2 px-3 rounded-2xl bg-gray-100 hover:bg-gray-200/80 border border-gray-200 text-gray-800 text-xs font-bold transition flex items-center justify-center gap-1.5"
-              >
-                <HeartHandshake className="w-3.5 h-3.5" />
-                <span>Continue as Partner</span>
-              </button>
-            </div>
-            <span className="text-[10px] text-gray-400 block text-center mt-1.5 italic">
-              Role is strictly verified from the database upon authentication.
-            </span>
-          </div>
 
           {/* Below: Don't have an account? Create account */}
           <div className="mt-6 text-center text-xs text-gray-500">

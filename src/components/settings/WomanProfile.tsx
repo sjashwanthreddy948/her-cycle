@@ -297,7 +297,7 @@ export const WomanProfile: React.FC = () => {
         <div className="relative shrink-0">
           <img
             src={avatarUrl}
-            alt={user?.full_name || 'Sarah'}
+            alt={user?.full_name || 'Profile'}
             className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover ring-4 ring-rose-200 shadow-md"
           />
           <button
@@ -315,7 +315,7 @@ export const WomanProfile: React.FC = () => {
             Feminine Profile
           </span>
           <h2 className="text-2xl font-black font-display text-gray-900 leading-tight">
-            {user?.full_name || 'Sarah Miller'}
+            {user?.full_name || 'My Profile'}
           </h2>
           <p className="text-xs text-gray-500">{user?.email || ''}</p>
           <div className="flex items-center justify-center sm:justify-start gap-2 pt-1 flex-wrap">
@@ -524,7 +524,7 @@ export const WomanProfile: React.FC = () => {
               <h4 className="text-xs font-bold text-gray-900">Partner Sharing</h4>
               <p className="text-[11px] text-gray-500">
                 {partnerLink?.status === 'approved'
-                  ? `Connected with ${partnerLink.partner_name || 'Alex'}`
+                  ? `Connected with ${partnerLink.partner_name || 'Partner'}`
                   : partnerLink?.status === 'pending'
                   ? 'Request awaiting your approval'
                   : 'No partner connected'}

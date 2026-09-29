@@ -68,9 +68,11 @@ export const DEFAULT_SHARING_PERMISSIONS: SharingPermissionsMap = {
 };
 
 export const standaloneDb = {
-  // Ensure realistic demo data is initialized for demo testing
   initDemoData(): void {
-    if (localStorage.getItem(DEMO_SEEDED_KEY)) return;
+    // Production clean mode: no demo data is seeded
+    return;
+  },
+  _unusedDemoSeed(): void {
 
     const womanId = 'usr_demo_woman_01';
     const partnerId = 'usr_demo_partner_02';

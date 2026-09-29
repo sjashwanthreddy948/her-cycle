@@ -477,7 +477,7 @@ export const RegisterPage: React.FC = () => {
                     avatarUrl === '/assets/woman-portrait.png' ? 'border-rose-500 ring-2 ring-rose-300' : 'border-gray-200'
                   }`}
                 >
-                  <img src="/assets/woman-portrait.png" alt="Sarah" className="w-full h-full object-cover" />
+                  <img src="/assets/woman-portrait.png" alt="Avatar option" className="w-full h-full object-cover" />
                 </button>
 
                 <button

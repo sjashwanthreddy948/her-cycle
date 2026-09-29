@@ -100,7 +100,7 @@ export const WomanHomePage: React.FC = () => {
   const isConnected = partnerLink && (partnerLink.status === 'approved');
   const isPending = partnerLink && partnerLink.status === 'pending';
   const isPaused = partnerLink?.is_paused || partnerLink?.status === 'paused';
-  const womanFirstName = user?.full_name?.split(' ')[0] || 'Sarah';
+  const womanFirstName = user?.full_name?.split(' ')[0] || 'there';
   const avatarUrl = user?.avatar_url || '/assets/woman-portrait.png';
 
   return (
@@ -137,7 +137,7 @@ export const WomanHomePage: React.FC = () => {
         >
           <img
             src={avatarUrl}
-            alt={user?.full_name || 'Sarah'}
+            alt={user?.full_name || 'Profile'}
             className="w-13 h-13 sm:w-14 sm:h-14 rounded-full object-cover ring-2 ring-rose-200 group-hover:ring-rose-400 shadow-sm transition"
           />
           <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full ring-2 ring-white" />
@@ -375,7 +375,7 @@ export const WomanHomePage: React.FC = () => {
             <div className="flex items-center gap-2.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-xs font-bold text-gray-900">
-                Connected with {partnerLink.partner_name || 'Alex'}
+                Connected with {partnerLink.partner_name || 'Partner'}
               </span>
             </div>
             <span className="text-[11px] font-semibold text-rose-600">
