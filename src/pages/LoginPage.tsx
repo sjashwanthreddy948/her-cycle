@@ -46,7 +46,7 @@ export const LoginPage: React.FC = () => {
         navigate('/woman/home');
       }
     } catch (err: any) {
-      setError(err?.message || 'Login failed. Please verify your credentials.');
+      setError(err?.message || 'Login failed. Please check your email and password.');
     } finally {
       setLoading(false);
     }
